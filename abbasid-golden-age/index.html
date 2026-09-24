@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Baghdad, City of Peace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="wrap">
+    <div class="stage">
+      <canvas id="stage" aria-label="Animated scenes of daily life in Abbasid Baghdad"></canvas>
+    </div>
+    <div class="controls">
+      <button id="play" type="button" aria-label="Pause">❚❚</button>
+      <button id="restart" type="button" aria-label="Restart">↺</button>
+      <input id="scrub" type="range" min="0" max="60" step="0.01" value="0" aria-label="Seek">
+      <span id="time">0:00 / 1:00</span>
+    </div>
+  </main>
+  <!-- Classic (non-module) scripts so the page runs straight from file:// -->
+  <script src="js/paper.js"></script>
+  <script src="js/figures.js"></script>
+  <script src="js/scenes.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
