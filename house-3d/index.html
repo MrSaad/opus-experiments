@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raised Ranch 3D</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #cfe0ee; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #app { position: fixed; inset: 0; }
+  #ui {
+    position: fixed; left: 16px; top: 16px; padding: 12px 14px; border-radius: 10px;
+    background: rgba(255,255,255,0.82); backdrop-filter: blur(6px); color: #2b2b2b;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12); max-width: calc(100vw - 60px);
+  }
+  #ui h1 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+  #ui .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  #ui button {
+    font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid #b9b4ab; background: #fff; color: #333;
+  }
+  #ui button:hover { background: #f1ede6; }
+  #ui button.on { background: #6e5646; color: #fff; border-color: #6e5646; }
+  #ui p { margin: 8px 0 0; font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="ui">
+  <h1>Raised ranch · three.js</h1>
+  <div class="row">
+    <button data-view="0">Angle 1</button>
+    <button data-view="1">Angle 2</button>
+    <button data-view="2">Angle 3</button>
+    <button data-view="3">Aerial</button>
+    <button id="spin">Auto-rotate</button>
+  </div>
+  <p>Drag to orbit · scroll to zoom · right-drag to pan</p>
+</div>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
