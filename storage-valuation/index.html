@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storage in the AI Era</title>
+<meta name="description" content="An independent, filings-first look at whether Sandisk, Seagate and Western Digital are undervalued for the next 3-5 years, testing the thesis that AI drives storage demand.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='6' rx='2' fill='%232a78d6'/%3E%3Crect x='4' y='14' width='24' height='6' rx='2' fill='%23eb6834'/%3E%3Crect x='4' y='22' width='24' height='6' rx='2' fill='%231baf7a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav class="topnav" aria-label="Sections">
+  <div class="inner">
+    <span class="brand">Storage × AI</span>
+    <a class="nl" href="#verdict">Verdict</a>
+    <a class="nl" href="#now">Where they are</a>
+    <a class="nl" href="#thesis">Testing the thesis</a>
+    <a class="nl" href="#execs">What execs say</a>
+    <a class="nl" href="#companies">Companies</a>
+    <a class="nl" href="#valuation">Valuation model</a>
+    <a class="nl" href="#risks">Risks &amp; signposts</a>
+    <a class="nl" href="#method">Method</a>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle dark mode">◐ Theme</button>
+  </div>
+</nav>
+
+<main>
+<!-- ================================================================ HERO -->
+<header class="hero">
+  <div class="eyebrow">Independent equity research · filings-first</div>
+  <h1>Are the storage makers undervalued for the AI era?</h1>
+  <p class="lede">Sandisk (SNDK), Seagate (STX) and Western Digital (WDC), analyzed from two years of their 10-Ks, 10-Qs, earnings releases and 22 earnings calls. The analysis tests the thesis that bigger models, bigger outputs (4K video) and open-source proliferation will drive storage demand, using alternative data: Hugging Face's full model registry, Civitai's ID counters, hyperscaler capex and disclosed token volumes.</p>
+  <p class="asof">Prices as of the Sept 23, 2026 close. Fundamentals through fiscal 2026 (year ended July 3, 2026) plus fiscal Q1 2027 guidance. Not investment advice.</p>
+</header>
+
+<!-- ================================================================ VERDICT -->
+<section id="verdict">
+  <div class="eyebrow">The short answer</div>
+  <h2>Your demand thesis is largely right. That no longer makes these stocks cheap.</h2>
+  <p class="lede">The evidence for AI-driven storage demand is strong, and in places stronger than the thesis claims. But in the past 12 months the three stocks rose 4× to 17×, and today's prices already assume that demand. Over 3–5 years, returns depend less on demand and more on whether today's <b>record pricing and margins</b> hold. My read: Seagate and WD have the more durable pricing; Sandisk has the most upside and the most downside.</p>
+
+  <div class="grid g3" id="verdictCards"></div>
+
+  <div class="callout">
+    <h4>How to read the ratings</h4>
+    <p>"Likely case" is my base scenario in the <a href="#valuation">valuation model</a>, built from management's own volume targets but with more conservative pricing and margin paths. The probability-weighted return blends the bull, base and bear cases using the weights shown, which you can change in the model. Returns are annualized price returns plus current dividend yield. None of this is a recommendation. It is a structured way to see what you have to believe at today's prices.</p>
+  </div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <h3>What the thesis gets right</h3>
+      <ul class="tight">
+        <li><b>Models are getting much bigger.</b> The largest open-weight models went from 405B parameters (Llama 3.1, Jul 2024) to 2.78T (Kimi K3, Jun 2026), about 7× in 23 months.</li>
+        <li><b>Usage is exploding.</b> Google alone went from 9.7T tokens/month (May 2024) to 3,200T (May 2026), a 330× increase.</li>
+        <li><b>Buyers are paying up.</b> Capex at the five largest US cloud spenders reached $181B in Q2 2026, 3.3× two years earlier.</li>
+        <li><b>The storage industry is sold out.</b> Seagate's nearline capacity is allocated into 2028, WD has long-term agreements (LTAs) through 2029, and Sandisk has $93.9B of minimum contracted revenue.</li>
+        <li><b>HDD pricing is rising,</b> which is historically almost unheard of: WD's price per TB was up high-teens % YoY in the June quarter.</li>
+        <li><b>Open source matters.</b> Open models carry roughly a third of OpenRouter tokens, new open-weight uploads on Hugging Face are about 8× their mid-2024 pace, and WD's CEO calls Chinese open-source models "good for the overall industry."</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>What it overstates or misses</h3>
+      <ul class="tight">
+        <li><b>AI outputs are a small share of storage, even 4K video.</b> A billion 10-second 4K clips per day, all retained, is about 27 EB/yr, or ~1.4% of annual HDD shipments. The big drivers are <i>retention</i> ("data compounds"), video training data for world models and physical AI, checkpoints and KV-cache offload.</li>
+        <li><b>Model weights are tiny as a storage load.</b> Every public model on Hugging Face combined is about 15 PB. The HDD industry ships more than 100,000× that <i>every year</i>.</li>
+        <li><b>Civitai has plateaued.</b> New models have held flat at ~95k/month since late 2024, and image posting slowed in 2026. Open-source activity has moved to LLMs and video on Hugging Face.</li>
+        <li><b>Profits depend on the supply/demand gap, not demand alone.</b> Today's margins (NAND 84%, HDD 55%) are 2–4× the 17-year averages because suppliers are holding back capacity. That can change.</li>
+        <li><b>The market already knows.</b> SNDK is +1,600% in 12 months, STX +305% and WDC +330%.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ WHERE THEY ARE -->
+<section id="now">
+  <div class="eyebrow">Where they are now</div>
+  <h2>Record everything: revenue, margins, cash flow, visibility</h2>
+  <p class="lede">All three just finished fiscal 2026 (year ended July 3, 2026) and guided to another step up in the September quarter. Sandisk's numbers are extraordinary even by memory-cycle standards: quarterly revenue went from $1.9B to $9.0B in four quarters, with gross margin going from 26% to 85%.</p>
+
+  <div class="tablewrap" id="snapshotTable"></div>
+  <p class="small muted" style="margin-top:6px">Run-rate = fiscal Q1 2027 guidance midpoint × 4. Market cap uses basic shares from the 10-K cover. P/E uses the diluted share count in guidance. EV/EBIT uses non-GAAP operating income at the run-rate. Sources: company 10-Ks, fiscal Q4 2026 earnings releases, Nasdaq price history.</p>
+
+  <div class="grid g2" style="margin-top:20px">
+    <div class="card chartcard">
+      <h3>Quarterly revenue</h3>
+      <div class="sub">$ millions, GAAP; dashed = next-quarter guidance midpoint</div>
+      <div id="chRevenue"></div>
+      <div class="source">SEC XBRL company facts; WD restated to HDD-only after the Feb 2025 Sandisk spin-off.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>Gross margin</h3>
+      <div class="sub">GAAP gross margin %, quarterly; dashed = guidance (non-GAAP)</div>
+      <div id="chGM"></div>
+      <div class="source">SEC XBRL; Seagate gross profit computed as revenue − cost of revenue.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>These margins have no precedent</h3>
+      <div class="sub">Annual gross margin %, 2008–2026. Dashed line = best HDD year from 2009 to 2024</div>
+      <div id="chLongGM"></div>
+      <div class="source">SEC XBRL. "NAND" = legacy SanDisk Corp. (2008–2015, calendar years) and the new Sandisk (FY23–FY26). WD figures before FY23 include its flash business.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>Stock price, growth of $1</h3>
+      <div class="sub">Indexed to Feb 24, 2025 (first full week of Sandisk trading), log scale</div>
+      <div id="chPx"></div>
+      <div class="source">Nasdaq historical quotes, weekly samples through Sep 23, 2026.</div>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <h4>Why the long-run margin chart matters most</h4>
+    <p>From 2009 to 2024, HDD gross margins stayed between 14% and 37%, and NAND ranged from 2% to 47%. Every prior peak (NAND 2010, 2013–14 and 2018; HDD 2012 and 2018) was followed by a price war within 1–3 years. Seagate's and WD's managements say the industry is structurally different now: drive units are flat, capacity growth comes only from areal density, and multi-year contracts are in place. Sandisk's management says long-term agreements take the "boom and bust" out of NAND. <b>If they are right, the stocks are reasonably priced. If history reasserts itself, today's earnings are a peak.</b></p>
+  </div>
+</section>
+
+<!-- ================================================================ THESIS -->
+<section id="thesis">
+  <div class="eyebrow">Testing your thesis with data</div>
+  <h2>Is AI actually driving storage demand, and through which channel?</h2>
+  <p class="lede">Your thesis has three parts: models are getting larger, outputs are getting bigger, and open source multiplies both. I tested each against first-party and alternative data. Below that are the demand drivers the thesis leaves out, which turn out to be the larger ones.</p>
+
+  <h3 style="margin-top:28px">1 · The money: hyperscaler capex and storage shipments</h3>
+  <div class="grid g2">
+    <div class="card chartcard">
+      <h3>Big-5 US cloud capex</h3>
+      <div class="sub">Cash paid for property &amp; equipment, $B per calendar quarter</div>
+      <div id="chCapex"></div>
+      <div class="source">Each company's 10-Q/10-K cash-flow statement (XBRL). Oracle fiscal quarters mapped to the nearest calendar quarter. Microsoft excludes finance leases.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>HDD exabytes shipped per quarter</h3>
+      <div class="sub">EB. Seagate as reported; WD FY25 quarters back-solved from disclosed YoY growth</div>
+      <div id="chEB"></div>
+      <div class="source">Seagate 10-Q/10-K MD&amp;A; WD earnings calls ("We delivered 231 exabytes…").</div>
+    </div>
+    <div class="card chartcard">
+      <h3>Revenue per TB is rising, not falling</h3>
+      <div class="sub">$ revenue per TB shipped (revenue ÷ exabytes), quarterly</div>
+      <div id="chPTB"></div>
+      <div class="source">Derived. HDD $/TB historically falls with every capacity generation. It has risen for 3–4 quarters straight.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>AI usage: Google's monthly tokens processed</h3>
+      <div class="sub">Trillions of tokens per month, log scale</div>
+      <div id="chTokens"></div>
+      <div class="source">Google I/O 2024–2026 keynotes; Alphabet Q2 and Q3 2025 earnings calls.</div>
+    </div>
+  </div>
+  <p class="ink2" style="margin-top:12px">Storage demand is following the capex. Seagate's exabyte shipments nearly doubled in two years (114 → 218 EB per quarter), and WD reached 231 EB. Unusually, both did it while <i>raising</i> price per TB. Seagate's CFO: "the gap between supply and demand is now a little bit bigger than a few quarters ago."</p>
+
+  <h3 style="margin-top:28px">2 · "Models are getting larger": yes, and faster than you might think</h3>
+  <div class="grid g2">
+    <div class="card chartcard">
+      <h3>Largest open-weight models by release date</h3>
+      <div class="sub">Total parameters (billions), log scale; first-party lab releases on Hugging Face. Dashed line: ~6.9× in 23 months</div>
+      <div id="chFrontier"></div>
+      <div class="source">Hugging Face hub-stats snapshot of all 3.09M public models (safetensors parameter counts), Sep 24, 2026. Merges, quantizations and joke uploads excluded.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>New model weights uploaded to Hugging Face</h3>
+      <div class="sub">Terabytes of new safetensors weights per month (params × dtype bytes)</div>
+      <div id="chHFWeights"></div>
+      <div class="source">Derived from the hub-stats models table. Excludes models with more than 4T params or more than 10 TB (spam metadata). Counts surviving public repos only.</div>
+    </div>
+  </div>
+  <div class="grid g4" style="margin-top:16px" id="hfStats"></div>
+  <p class="ink2" style="margin-top:12px">The largest open model roughly doubles every 8 months, and uploads of new weights went from ~0.18 PB to ~1.5 PB per month in two years. But keep the scale in mind: <b>all public model weights on Hugging Face total ~15 PB</b>, and WD alone ships that much hard-drive capacity roughly every 9 minutes (872 EB/yr). Bigger models matter for storage <i>indirectly</i>. They need more training data (especially video), their checkpoints are huge, and their KV caches are huge. The weights themselves are a small load.</p>
+
+  <h3 style="margin-top:28px">3 · "Outputs are getting bigger": true per item, still small in aggregate</h3>
+  <div class="grid g2">
+    <div class="card chartcard">
+      <h3>Bytes per unit of AI output</h3>
+      <div class="sub">Log scale. Each step right is 10×</div>
+      <div id="chBytes"></div>
+      <div class="source">My calculations. Video at typical delivery bitrates (1080p ≈ 8 Mbps, 4K ≈ 40 Mbps; YouTube's recommended 4K upload is 35–45 Mbps) and ProRes 422 HQ ≈ 700 Mbps. KV cache from published model configs: DeepSeek-V3 MLA ≈ 70 KB/token, Llama-3.1-405B GQA ≈ 0.5 MB/token. Training checkpoint ≈ 14 bytes/param incl. optimizer states.</div>
+    </div>
+    <div class="card">
+      <h3>Calculator: how much storage does AI video create?</h3>
+      <div class="sub">Change the inputs. The comparison is ~1.9 ZB of HDDs shipped per year (Seagate FY26 789 EB + WD 872 EB + an estimated ~250 EB from Toshiba)</div>
+      <div class="controls" id="calcControls"></div>
+      <div class="results" id="calcResults"></div>
+      <p class="small ink2" id="calcNote"></p>
+    </div>
+  </div>
+  <div class="callout">
+    <h4>The more important channel: KV cache and "data compounds"</h4>
+    <p>Text is tiny (about 4 bytes per token), but the <i>working state</i> an LLM produces for each token is not. DeepSeek-style models create ~70 KB of KV cache per token and dense 405B-class models ~0.5 MB. At Google's 3,200T tokens/month, that is on the order of <b>~220 EB of KV state generated every month</b>, far more than all the storage shipped. Almost none of it is kept for long, but agentic workloads increasingly <i>persist</i> context instead of recomputing it. That is the pitch in Sandisk's "1 ZB persistent KV store by 2030" and Seagate's KV-cache tiering white paper with SK hynix. Add physical AI (fleets of cameras feeding world models) and the practice of keeping everything as future training data, and you have the real engine. WD's CEO put it this way: <i>"While compute cycles can be reused, data compounds."</i></p>
+  </div>
+
+  <h3 style="margin-top:28px">4 · "Open source compounds everything": Hugging Face yes, Civitai no longer</h3>
+  <div class="grid g2">
+    <div class="card chartcard">
+      <h3>Civitai: cumulative uploads (from sequential IDs)</h3>
+      <div class="sub">Millions; model versions (left scale ×1) and posted images (÷ 50, to share one axis)</div>
+      <div id="chCivitai"></div>
+      <div class="source">Civitai public API. Model-version and image IDs are sequential, so sampling IDs against their createdAt dates gives a cumulative counter, including items later deleted.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>Monthly upload rates</h3>
+      <div class="sub">Thousands per month: Civitai model versions vs. Hugging Face new models</div>
+      <div id="chRates"></div>
+      <div class="source">Civitai rates derived from the ID samples; Hugging Face from createdAt of the 3.09M public models.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>Video is the growth vector in open source</h3>
+      <div class="sub">New Hugging Face repos per month tagged for video generation (models) and video data (datasets)</div>
+      <div id="chVideoHF"></div>
+      <div class="source">Hugging Face hub-stats: pipeline_tag in {text-to-video, image-to-video, video-to-video}; dataset tags containing "video".</div>
+    </div>
+    <div class="card chartcard">
+      <h3>Open datasets on Hugging Face</h3>
+      <div class="sub">Cumulative size of public datasets, PB (by creation month)</div>
+      <div id="chHFData"></div>
+      <div class="source">Hugging Face hub-stats datasets table, mainSize field.</div>
+    </div>
+  </div>
+  <p class="ink2" style="margin-top:12px"><b>Verdict on Civitai as a proxy:</b> it was a good proxy for 2023–24, when image-model uploads went from zero to about 110k/month. Since then it has been flat at ~90–100k/month, and the image-posting rate fell from ~5.7M/month (2025) to ~3.1M/month (2026 YTD). It now reflects one community's saturation, not the open-source frontier. Hugging Face shows where that frontier moved: text-to-video models went from ~50/month in late 2024 to 300–770/month in 2026, and video-tagged datasets from ~400 to ~8,000 per month. For storage, video datasets are the relevant signal, because world models and physical AI train on "millions of hours of historical and synthetic video" (Mosley).</p>
+</section>
+
+<!-- ================================================================ EXECS -->
+<section id="execs">
+  <div class="eyebrow">How management talks</div>
+  <h2>From "mid-cycle pause" to "four years of visibility" in 18 months</h2>
+  <p class="lede">I read all 22 earnings calls since mid-2024 and tracked what each team said about <b>how far ahead demand is contracted</b>, which themes they emphasized, and how their guidance compared with results. I also checked what executives <i>did</i> with their own stock.</p>
+
+  <div class="grid g2">
+    <div class="card chartcard span2">
+      <h3>Contracted/allocated visibility, as stated on each call</h3>
+      <div class="sub">Months from the call date to the end of the furthest period management described as booked, allocated or under LTA. Hover for the quote</div>
+      <div id="chVis"></div>
+      <div class="source">My reading of prepared remarks and Q&amp;A in each earnings call. Where a year was named ("into calendar 2028"), I used the end of that year, except Seagate's "into CY2028," which I set at mid-2028.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>Beat vs. revenue guidance</h3>
+      <div class="sub">Actual revenue vs. guidance midpoint, % (last five quarters for each company)</div>
+      <div id="chBeat"></div>
+      <div class="source">Guidance from each prior quarter's earnings release; actuals from the next release.</div>
+    </div>
+    <div class="card chartcard">
+      <h3>Insider open-market sales</h3>
+      <div class="sub">$M per month, all officers and directors. Open-market purchases in 12 months: <b>zero</b> at all three</div>
+      <div id="chInsider"></div>
+      <div class="source">SEC Form 4 XML (code "S"), Sep 2025 – Sep 2026. About 65% of sale-bearing filings were flagged as Rule 10b5-1 plans.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>What they talk about: theme mentions per 10,000 words, by call</h3>
+    <div class="sub">Darker = mentioned more. Fiscal-quarter labels (e.g., FY26 Q4 = the June 2026 quarter, reported late Jul/Aug 2026)</div>
+    <div id="chHeat"></div>
+    <div class="source">Regex counts over full transcripts (prepared remarks + Q&amp;A, including analysts' questions).</div>
+  </div>
+
+  <div class="grid g2" style="margin-top:16px">
+    <div class="card">
+      <h3>What I take from the tone</h3>
+      <ul class="tight">
+        <li><b>Visibility went from 3 months to 3–5 years.</b> This is the biggest real change. Customers are signing volume <i>and</i> financial commitments: Sandisk holds $16.5B in guarantees and deposits, and its contract liabilities went from $25M to $1.24B in one year.</li>
+        <li><b>"Cycle" language faded; "durable" and "structural" replaced it.</b> At Seagate and WD, cycle talk fell from 6–10 mentions per call (2024 to early 2025, including a "mid-cycle pause") to 0–4 in 2026. Sandisk still raises it, mostly to argue it has been engineered away. Every prior memory peak had a version of that argument.</li>
+        <li><b>Management has sandbagged consistently.</b> All three beat the <i>top</i> of their revenue guidance nearly every quarter, and Sandisk by up to 29%. Guidance is conservative and credible.</li>
+        <li><b>Open source is barely discussed.</b> WD raised it once (positively), in response to a question about China. To executives it is a demand driver like any other.</li>
+        <li><b>Themes rotated:</b> "training" (2024) → "inference" (2025) → "agentic, KV cache, physical AI" (2026). Pricing mentions at Seagate and WD roughly tripled from 2025 to 2026.</li>
+        <li><b>Insiders are selling heavily and buying nothing.</b> That is common after 4–17× moves and mostly under pre-set plans, but Seagate's selling accelerated to $250M in September 2026. Sandisk's CEO sold ~$105M the month after the investor day.</li>
+      </ul>
+    </div>
+    <div class="card" id="quotesCard">
+      <h3>In their own words</h3>
+      <div class="seg" id="quoteTabs" role="group" aria-label="Filter quotes by company"></div>
+      <div id="quotes" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>What management is projecting</h3>
+    <div class="tablewrap" style="border:0" id="targetsTable"></div>
+  </div>
+</section>
+
+<!-- ================================================================ COMPANIES -->
+<section id="companies">
+  <div class="eyebrow">Company deep dives</div>
+  <h2>Three very different bets on the same trend</h2>
+  <div class="tabs" id="coTabs" role="tablist"></div>
+  <div id="coPanels"></div>
+</section>
+
+<!-- ================================================================ VALUATION -->
+<section id="valuation">
+  <div class="eyebrow">Valuation model</div>
+  <h2>What you have to believe at today's price</h2>
+  <p class="lede">A simple, transparent 5-year model that starts from each company's <b>current run-rate</b> (September-quarter guidance × 4). Revenue grows with unit volume (exabytes or bits) × price per unit, the gross margin follows the path you set, operating expenses grow steadily, buybacks shrink the share count, and an exit P/E turns earnings into a price. Choose a preset or move the sliders.</p>
+  <div class="tabs" id="mTabs" role="tablist"></div>
+  <div class="seg" id="mPresets" role="group" aria-label="Scenario preset" style="margin-bottom:6px"></div>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Assumptions</h3>
+      <div class="controls" id="mControls"></div>
+    </div>
+    <div class="card">
+      <h3>Result</h3>
+      <div class="sub">Implied price each year = that year's EPS × exit P/E. A first-year dip means today's price is above the exit multiple on next year's earnings.</div>
+      <div class="results" id="mResults"></div>
+      <div id="chModel"></div>
+    </div>
+  </div>
+  <div class="tablewrap" id="mTable" style="margin-top:16px"></div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Scenario summary and probability weights</h3>
+    <div class="sub">Preset scenarios for each company. Change the weights to see the expected annualized return</div>
+    <div id="scenarioTable"></div>
+  </div>
+
+  <div class="grid g3" style="margin-top:16px">
+    <div class="card">
+      <h4>Why the HDD presets look alike</h4>
+      <p class="small ink2">Seagate and WD are a near-duopoly (Toshiba is a distant third) with the same customers, exabyte growth targets (mid-20s %) and capex discipline (4–6% of revenue). The differences are the starting point: Seagate's margin is ~1.5 pts higher and it leads on HAMR; WD's shares are cheaper and it buys back more. These show up in the run-rate inputs, not the presets.</p>
+    </div>
+    <div class="card">
+      <h4>Why Sandisk's range is so wide</h4>
+      <p class="small ink2">NAND price per GB rose about 150% in a year, and that price, not volume, drives the P&amp;L: management's bits grow only mid-teens. Contracts floor about half to two-thirds of bits ($93.9B minimum over ~4 years), so revenue probably can't collapse to 2023 levels (~$6B). Unprotected bits still re-price with the market.</p>
+    </div>
+    <div class="card">
+      <h4>Exit multiples</h4>
+      <p class="small ink2">Historical P/E: Seagate ~8–15×, WD ~8–12×, memory at peak earnings 5–10×. I give HDD 13–20× (credit for structural change) and NAND 11–12× (credit for contracts). Paying 30× today assumes the market keeps paying that after growth slows. That is the main risk in the HDD names.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ RISKS -->
+<section id="risks">
+  <div class="eyebrow">Risks &amp; what to watch</div>
+  <h2>The signposts that would change my mind</h2>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Bear arguments I take seriously</h3>
+      <ol class="tight">
+        <li><b>The price second derivative is turning at Sandisk.</b> June-quarter growth was two-thirds price. September-quarter guidance calls for only "modest price increases," and gross margin is guided <i>flat to down</i>. Peak pricing momentum typically comes before peak earnings, and memory stocks peak on pricing momentum.</li>
+        <li><b>Demand destruction is visible at the edge.</b> Sandisk expects smartphone and PC units down mid-teens in 2026. Consumer revenue fell 32% QoQ and consumer exabytes fell mid-teens YoY. High prices ration demand.</li>
+        <li><b>Capex digestion.</b> Big-5 capex is running at ~$725B/yr. Storage orders lag compute, so a 2027–28 capex pause would reach HDD orders with a delay. LTAs cushion volume but set prices by formula.</li>
+        <li><b>Supply response.</b> HAMR (Seagate 4→5 TB/platter; WD 44TB in 2027 and 100TB by 2029) raises exabyte output per factory. NAND: BiCS10 has 60% more bit density, and YMTC is expanding. Today's discipline has never been tested at these margins.</li>
+        <li><b>Valuation leaves little room.</b> At ~30× run-rate EPS, Seagate and WD need several more years of 20%+ growth <i>and</i> steady multiples.</li>
+        <li><b>Insiders are only selling.</b> Zero open-market buys, with Seagate's sales accelerating.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>Bull arguments I take seriously</h3>
+      <ol class="tight">
+        <li><b>Contracts with teeth.</b> Sandisk holds $16.5B in guarantees, 8 long-term deals with a weighted duration of more than 4 years, and customers "coming back for a second round" within a quarter. WD is negotiating LTAs for 2029–2031.</li>
+        <li><b>HDD capacity is structurally constrained.</b> Units are flat by design, and heads/media factories are the bottleneck. Mosley: areal density transitions are probably "not going to be sufficient" for 2028–29 demand.</li>
+        <li><b>The NAND shortage helps HDD.</b> With flash prices up ~2.5×, the $/TB gap to HDD widened, and WD sees enterprise arrays moving back to hybrid designs. The usual substitution threat has reversed for now.</li>
+        <li><b>Management has beaten guidance consistently</b> and deleveraged: WD is net cash, Sandisk has no debt, and Seagate's debt fell from $5B to ~$2.4B.</li>
+        <li><b>New buyers are emerging.</b> Neoclouds, sovereigns, frontier labs, autonomous-vehicle and robotics fleets, and enterprises running open-source models locally. One AV customer's 2027 exabyte demand "increased multiple-fold" (WD).</li>
+        <li><b>Sandisk is cheap if the earnings hold.</b> At ~10× run-rate EPS and ~10% FCF yield, with 100% of excess cash returned, even the base case compounds via buybacks.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="tablewrap" style="margin-top:16px" id="signposts"></div>
+</section>
+
+<!-- ================================================================ METHOD -->
+<section id="method">
+  <div class="eyebrow">Method &amp; sources</div>
+  <h2>How this was built</h2>
+  <div class="two-col">
+    <div>
+      <h4>Primary documents (SEC EDGAR)</h4>
+      <p class="small ink2">25 10-K/10-Q filings (Jun 2024 – Jul 2026) and 25 earnings-release exhibits (8-K item 2.02), read and parsed directly. Financial series come from XBRL company facts. Quarterly values are derived from YTD figures where needed and use the latest-filed value to pick up restatements (e.g., WD's recast after the Sandisk spin).</p>
+    </div>
+    <div>
+      <h4>Earnings calls</h4>
+      <p class="small ink2">22 full transcripts (Seagate FY24 Q4 → FY26 Q4; WD FY24 Q4 → FY26 Q4; Sandisk FY25 Q3 → FY26 Q4) plus Sandisk's Aug 2026 investor-day release. Quotes are verbatim excerpts. Visibility horizons are my reading.</p>
+    </div>
+    <div>
+      <h4>Alternative data</h4>
+      <p class="small ink2">Hugging Face hub-stats (all 3.09M public models, 1.06M datasets; snapshot Sep 24, 2026), Civitai public API (sequential-ID sampling), hyperscaler capex from their own XBRL, Google's disclosed token counts, SEC Form 4 XML for insider trades.</p>
+    </div>
+    <div>
+      <h4>What I deliberately ignored</h4>
+      <p class="small ink2">Sell-side ratings, price targets and third-party forecasts. Where an outside number appears (e.g., WD's Feb 2026 long-term targets, which I could only find in secondary summaries), it is labeled.</p>
+    </div>
+    <div>
+      <h4>Limitations</h4>
+      <p class="small ink2">Hugging Face counts only surviving public repos. Civitai IDs include deleted items. WD's FY25 exabyte series is partly back-solved. Stock prices are one day's close. The model is intentionally simple (no working capital, a single tax rate, flat opex growth).</p>
+    </div>
+    <div>
+      <h4>Files</h4>
+      <p class="small ink2">See <code>research/REPORT.md</code> for the full written analysis, <code>research/SOURCES.md</code> for every URL, <code>research/data/</code> for CSVs, and <code>research/scripts/</code> for the code that pulled and processed everything.</p>
+    </div>
+  </div>
+</section>
+</main>
+<footer>
+  Independent analysis prepared Sept 25, 2026 from public filings and data. Not investment advice. Figures may contain errors; verify against the primary sources before acting.
+</footer>
+
+<script src="data/data.js"></script>
+<script src="data/content.js"></script>
+<script src="assets/model.js"></script>
+<script src="assets/charts.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
