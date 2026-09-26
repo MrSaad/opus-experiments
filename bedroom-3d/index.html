@@ -103,7 +103,7 @@
     font: 11px system-ui, sans-serif; color: #e8e8e8; background: rgba(20,20,22,.55);
     padding: 1px 6px; border-radius: 4px; white-space: nowrap;
   }
-  #viewbar { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; }
+  #viewbar { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
   #viewbar button { background: rgba(255,255,255,.9); color: #1d1d1f; border-color: rgba(0,0,0,.12); }
   #viewbar button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
   #toast {
@@ -134,6 +134,8 @@
   <div id="viewbar">
     <button id="view3d" class="on">3D view</button>
     <button id="viewTop">Top view</button>
+    <button id="viewPhoto1" title="Standing at the door, looking toward the window">Photo 1 view</button>
+    <button id="viewPhoto2" title="Standing by the window, looking back toward the door">Photo 2 view</button>
   </div>
   <div id="toast"></div>
 </div>
@@ -384,7 +386,6 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.45;
 
 const persp = new THREE.PerspectiveCamera(45, 1, 1, 6000);
-persp.position.set(-15, 175, 80);
 const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 4000);
 ortho.position.set(CENTER.x, 1500, CENTER.z);
 ortho.up.set(0, 0, -1);
@@ -450,6 +451,23 @@ const floor = new THREE.Mesh(new THREE.ShapeGeometry(floorShape), M.floor);
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
+
+// Ceiling and the bulkhead along the top wall (seen in both photos). Only shown
+// when the camera is inside the room, so the overview can look down into it.
+const ceilingItems = [];
+{
+  const ceil = new THREE.Mesh(new THREE.ShapeGeometry(floorShape),
+    new THREE.MeshStandardMaterial({ color: '#f4f4f2', roughness: 0.95, side: THREE.BackSide }));
+  ceil.rotation.x = -Math.PI / 2;
+  ceil.position.y = CEIL;
+  const bulk = box(113, 12, 16, new THREE.MeshStandardMaterial({ color: '#f4f4f2', roughness: 0.95 }), 0, 0, 0, false);
+  bulk.position.copy(P(26 + 113 / 2, 107 - 8, CEIL - 6));
+  // the photos show the bulkhead's face painted the wall grey
+  const bulkSide = box(113, 12, 0.2, M.wall, 0, 0, 0, false);
+  bulkSide.position.copy(P(26 + 113 / 2, 107 - 16.1, CEIL - 6));
+  ceilingItems.push(ceil, bulk, bulkSide);
+  scene.add(ceil, bulk, bulkSide);
+}
 
 // Floor grid, clipped to the L-shape
 {
@@ -869,14 +887,29 @@ topCtl.enabled = false;
 
 const controls = () => (camera === persp ? orbit : topCtl);
 
-function setView(top) {
+// Camera presets, as plan [x, y, height]. The two photo views approximate where
+// the photos were taken from: eye height ~60″ with a wide phone lens.
+const VIEWS = {
+  view3d:     { pos: [-15, -80, 175], look: [69.5, 53.5, 10], fov: 45 },
+  viewPhoto1: { pos: [36, 3, 62], look: [96, 107, 32], fov: 72 },
+  viewPhoto2: { pos: [134, 6, 62], look: [14, 60, 30], fov: 72 },
+};
+
+function setView(name) {
+  const top = name === 'viewTop';
   camera = top ? ortho : persp;
   orbit.enabled = !top; topCtl.enabled = top;
-  $('view3d').classList.toggle('on', !top);
-  $('viewTop').classList.toggle('on', top);
+  const v = VIEWS[name];
+  if (v) {
+    persp.position.copy(P(...v.pos));
+    orbit.target.copy(P(...v.look));
+    persp.fov = v.fov; persp.updateProjectionMatrix();
+    orbit.minDistance = name === 'view3d' ? 40 : 5;
+    orbit.update();
+  }
+  for (const id of ['view3d', 'viewTop', 'viewPhoto1', 'viewPhoto2']) $(id).classList.toggle('on', id === name);
 }
-$('view3d').onclick = () => setView(false);
-$('viewTop').onclick = () => setView(true);
+for (const id of ['view3d', 'viewTop', 'viewPhoto1', 'viewPhoto2']) $(id).onclick = () => setView(id);
 
 // ---------------------------------------------------------------------------
 // Panel + keyboard wiring
@@ -923,12 +956,15 @@ resize();
 
 function updateWallVisibility() {
   const cp = [camera.position.x, -camera.position.z];
+  const inside = camera === persp && camera.position.y < CEIL && inRoom(cp);
   for (const { wall: w, group } of wallGroups) {
     const d = (cp[0] - w.a[0]) * w.inN[0] + (cp[1] - w.a[1]) * w.inN[1];
-    group.visible = camera === ortho || d > -2; // hide walls between the camera and the room
+    group.visible = inside || camera === ortho || d > -2; // hide walls between the camera and the room
   }
+  for (const o of ceilingItems) o.visible = inside;
 }
 
+setView('view3d');
 refresh();
 renderer.setAnimationLoop(() => {
   controls().update();
