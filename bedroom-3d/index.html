@@ -136,6 +136,7 @@
     <button id="viewTop">Top view</button>
     <button id="viewPhoto1" title="Standing at the door, looking toward the window">Photo 1 view</button>
     <button id="viewPhoto2" title="Standing by the window, looking back toward the door">Photo 2 view</button>
+    <button id="enterXR" hidden>Enter mixed reality</button>
   </div>
   <div id="toast"></div>
 </div>
@@ -365,8 +366,11 @@ const P = (x, y, h = 0) => new THREE.Vector3(x, h, -y);
 const CENTER = P(69.5, 53.5);
 
 const viewport = document.getElementById('viewport');
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// alpha lets the headset's passthrough show behind the model in mixed reality
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -380,7 +384,12 @@ labelRenderer.domElement.style.pointerEvents = 'none';
 viewport.appendChild(labelRenderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#cdd6e0');
+const SKY = new THREE.Color('#cdd6e0');
+scene.background = SKY;
+// Everything in the room lives in `world`, in inches. In XR it is scaled to
+// metres and posed onto the real floor; on desktop it stays at identity.
+const world = new THREE.Group();
+scene.add(world);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.45;
@@ -392,7 +401,7 @@ ortho.up.set(0, 0, -1);
 let camera = persp;
 
 // Lights
-scene.add(new THREE.HemisphereLight('#f4f6fb', '#4a4640', 0.9));
+world.add(new THREE.HemisphereLight('#f4f6fb', '#4a4640', 0.9));
 const sun = new THREE.DirectionalLight('#fff1dc', 2.2);
 sun.position.copy(P(320, 20, 170));
 sun.target.position.copy(P(70, 60, 0));
@@ -401,10 +410,10 @@ sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -140, right: 140, top: 140, bottom: -140, near: 10, far: 700 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.3;
-scene.add(sun, sun.target);
+world.add(sun, sun.target);
 const fill = new THREE.PointLight('#fff7ea', 5000, 0, 2);
 fill.position.copy(P(80, 55, CEIL - 6));
-scene.add(fill);
+world.add(fill);
 
 // Materials
 function carpetTexture() {
@@ -450,7 +459,7 @@ const floorShape = new THREE.Shape(ROOM.map(([x, y]) => new THREE.Vector2(x, y))
 const floor = new THREE.Mesh(new THREE.ShapeGeometry(floorShape), M.floor);
 floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
-scene.add(floor);
+world.add(floor);
 
 // Ceiling and the bulkhead along the top wall (seen in both photos). Only shown
 // when the camera is inside the room, so the overview can look down into it.
@@ -466,7 +475,7 @@ const ceilingItems = [];
   const bulkSide = box(113, 12, 0.2, M.wall, 0, 0, 0, false);
   bulkSide.position.copy(P(26 + 113 / 2, 107 - 16.1, CEIL - 6));
   ceilingItems.push(ceil, bulk, bulkSide);
-  scene.add(ceil, bulk, bulkSide);
+  world.add(ceil, bulk, bulkSide);
 }
 
 // Floor grid, clipped to the L-shape
@@ -476,7 +485,7 @@ const ceilingItems = [];
   for (let y = 12; y < 107; y += 12) { const x0 = y < 33 ? 0 : 26; pts.push(P(x0, y, 0.08), P(139, y, 0.08)); }
   var grid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),
     new THREE.LineBasicMaterial({ color: '#8d8d92', transparent: true, opacity: 0.35 }));
-  scene.add(grid);
+  world.add(grid);
 }
 
 // Walls: each wall is a group in its own frame. Local +x runs along the wall
@@ -516,13 +525,13 @@ WALLS.forEach((w, k) => {
   solid(cursor, w.len + ext1, 0, CEIL);
   // dark cap so the cut wall tops read clearly from above
   g.add(box(w.len + ext0 + ext1, 0.4, WALL_T, M.wallTop, (w.len + ext1 - ext0) / 2, CEIL + 0.2, zc, false));
-  scene.add(g);
+  world.add(g);
 
   // low stub that stays visible when the wall is cut away
   const stub = new THREE.Group();
   stub.position.copy(g.position); stub.rotation.copy(g.rotation);
   stub.add(box(w.len + ext0 + ext1, 3, WALL_T, M.wallTop, (w.len + ext1 - ext0) / 2, 1.5, zc, false));
-  scene.add(stub);
+  world.add(stub);
   wallGroups.push({ wall: w, group: g, stub });
 });
 
@@ -572,13 +581,15 @@ function curtain(x, z, width, height) {
 }
 
 // Balcony and a hint of the city outside the window
+const outside = new THREE.Group(); // hidden in mixed reality
+world.add(outside);
 {
   const slab = box(70, 6, 107, new THREE.MeshStandardMaterial({ color: '#8f8f8c', roughness: 0.9 }), 0, 0, 0);
   slab.position.copy(P(139 + WALL_T + 35, 53.5, -3.2));
-  scene.add(slab);
+  outside.add(slab);
   const rail = box(0.6, 38, 107, M.glass, 0, 0, 0, false);
-  rail.position.copy(P(139 + WALL_T + 69, 53.5, 19)); scene.add(rail);
-  const top = box(1.5, 1.5, 107, M.dark); top.position.copy(P(139 + WALL_T + 69, 53.5, 38)); scene.add(top);
+  rail.position.copy(P(139 + WALL_T + 69, 53.5, 19)); outside.add(rail);
+  const top = box(1.5, 1.5, 107, M.dark); top.position.copy(P(139 + WALL_T + 69, 53.5, 38)); outside.add(top);
   const bmat = [new THREE.MeshStandardMaterial({ color: '#b8a58b', roughness: 0.8 }),
                 new THREE.MeshStandardMaterial({ color: '#9aa3ad', roughness: 0.6 }),
                 new THREE.MeshStandardMaterial({ color: '#c9c4bb', roughness: 0.8 })];
@@ -586,9 +597,25 @@ function curtain(x, z, width, height) {
                 [900, 380, 260, 260, 600], [1200, 0, 380, 380, 1500], [700, 620, 200, 240, 500]];
   blds.forEach(([x, y, w, d, h], i) => {
     const b = box(w, h + 1500, d, bmat[i % 3], 0, 0, 0, false);
-    b.position.copy(P(x, y, (h - 1500) / 2)); scene.add(b);
+    b.position.copy(P(x, y, (h - 1500) / 2)); outside.add(b);
   });
 }
+
+// Wireframe of the room's corners, shown in mixed reality in place of the solid
+// walls so you can check the model lines up with the real room.
+const roomOutline = (() => {
+  const pts = [];
+  ROOM.forEach((p, i) => {
+    const q = ROOM[(i + 1) % ROOM.length];
+    for (const h of [0.3, CEIL]) pts.push(P(...p, h), P(...q, h));
+    pts.push(P(...p, 0), P(...p, CEIL));
+  });
+  const l = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7 }));
+  l.visible = false;
+  world.add(l);
+  return l;
+})();
 
 // Door swing arc (dashed)
 {
@@ -601,17 +628,47 @@ function curtain(x, z, width, height) {
   const mat = new THREE.LineDashedMaterial({ color: '#e5e5e5', dashSize: 2, gapSize: 1.5 });
   for (const p of [pts, arc]) {
     const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(p), mat);
-    l.computeLineDistances(); scene.add(l);
+    l.computeLineDistances(); world.add(l);
   }
 }
 
+// HTML labels don't render inside a headset, so XR uses these canvas sprites
+// instead. `h` is the label height in inches.
+const xrSprites = [];
+function textSprite(bg, h) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+  const g = c.getContext('2d');
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  s.scale.set(h * 512 / 96, h, 1);
+  s.renderOrder = 20; s.visible = false;
+  let last = null;
+  s.userData.setText = (text) => {
+    if (text === last) return;
+    last = text;
+    g.clearRect(0, 0, 512, 96);
+    g.font = '600 52px system-ui, sans-serif';
+    const w = Math.min(512, g.measureText(text).width + 44);
+    g.fillStyle = bg; g.beginPath(); g.roundRect(256 - w / 2, 8, w, 80, 40); g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, 256, 50);
+    tex.needsUpdate = true;
+  };
+  xrSprites.push(s);
+  return s;
+}
+
 // Feature labels
-const featureLabels = [];
+const featureLabels = [], featureSprites = [];
 function addLabel(text, x, y, h) {
   const div = document.createElement('div');
   div.className = 'feat-label'; div.textContent = text;
-  const o = new CSS2DObject(div); o.position.copy(P(x, y, h)); scene.add(o);
+  const o = new CSS2DObject(div); o.position.copy(P(x, y, h)); world.add(o);
   featureLabels.push(o);
+  const s = textSprite('rgba(20,20,22,.7)', 3);
+  s.userData.setText(text); s.position.copy(P(x, y, h + 2)); world.add(s);
+  featureSprites.push(s);
 }
 addLabel('Window', 131, 46, 2);
 addLabel('Mirror closet', 88.5, 7, 2);
@@ -646,7 +703,7 @@ const bedGroup = new THREE.Group();
   }
   bedGroup.traverse(o => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; } });
 }
-scene.add(bedGroup);
+world.add(bedGroup);
 
 // footprint outline + highlight fill
 const footprint = new THREE.LineLoop(
@@ -673,9 +730,10 @@ const dims = DIRS.map(D => {
   const div = document.createElement('div');
   div.className = 'dim-label'; div.style.background = D.color;
   const label = new CSS2DObject(div);
-  g.add(shaft, capA, capB, label);
-  scene.add(g);
-  return { D, g, shaft, capA, capB, label, div };
+  const sprite = textSprite(D.color, 4);
+  g.add(shaft, capA, capB, label, sprite);
+  world.add(g);
+  return { D, g, shaft, capA, capB, label, div, sprite };
 });
 
 function updateDim(dim, res) {
@@ -692,6 +750,8 @@ function updateDim(dim, res) {
   dim.capA.position.copy(a); dim.capB.position.copy(b);
   dim.label.position.copy(a).lerp(b, 0.5).add(new THREE.Vector3(0, 3, 0));
   dim.div.textContent = fmtShort(res.t);
+  dim.sprite.position.copy(dim.label.position).add(new THREE.Vector3(0, 1.5, 0));
+  dim.sprite.userData.setText(fmtShort(res.t));
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +792,7 @@ function refresh() {
 
   DIRS.forEach((D, i) => {
     const res = clearance(bed, D.d);
+    lastClear[i] = res;
     updateDim(dims[i], res);
     if (isFinite(res.t)) {
       rows[i].wall.textContent = res.wall.name;
@@ -752,7 +813,9 @@ function refresh() {
     if (document.activeElement !== el) el.value = v;
   }
   $('rngA').value = Math.round(deg);
+  drawXRPanel();
 }
+const lastClear = [];
 
 const normDeg = (d) => { d = ((d + 180) % 360 + 360) % 360 - 180; return Math.abs(d + 180) < 1e-6 ? 180 : d; };
 
@@ -806,7 +869,9 @@ const rotateBy = (deg) => rotateTo(bed.a + deg * Math.PI / 180);
 let toastTimer;
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+  xrMsg = msg; drawXRPanel();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); xrMsg = null; drawXRPanel(); }, xr.on ? 3500 : 1800);
 }
 
 // ---------------------------------------------------------------------------
@@ -824,8 +889,14 @@ function setNDC(e) {
 }
 function floorPoint(e) {
   setNDC(e);
+  return rayToPlan(raycaster.ray);
+}
+// Where a ray meets the floor, in plan inches.
+function rayToPlan(ray) {
   const v = new THREE.Vector3();
-  return raycaster.ray.intersectPlane(floorPlane, v) ? [v.x, -v.z] : null;
+  if (!ray.intersectPlane(floorPlane, v)) return null;
+  world.worldToLocal(v);
+  return [v.x, -v.z];
 }
 function hitsBed(e) {
   setNDC(e);
@@ -938,6 +1009,317 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ---------------------------------------------------------------------------
+// WebXR (Quest). Mixed reality draws the bed at 1:1 scale on your real floor;
+// VR is the fallback for headsets without passthrough.
+// ---------------------------------------------------------------------------
+const XR_SCALE = 0.0254; // inches → metres
+// Two floor corners used to line the model up with the real room.
+const ALIGN = [
+  { p: [139, 0], say: 'the floor corner where the mirror-closet wall meets the window wall' },
+  { p: [139, 107], say: 'the other end of the window wall, where it meets the headboard wall' },
+];
+const HELP = 'Trigger: drag bed · Grip: rotate by dragging · Stick ←→: turn 15° · A/B/X/Y: bring this panel to you';
+
+const xr = { on: false, mode: null, walls: false, drag: null, align: null, panelIn: 0 };
+let xrMsg = null;
+const xrCam = new THREE.PerspectiveCamera(70, 1, 0.02, 100);
+const shadowFloor = new THREE.ShadowMaterial({ opacity: 0.3 });
+const SUN_BOX = { ...sun.shadow.camera }, FILL_I = fill.intensity;
+
+function setWorldScale(s) {
+  world.scale.setScalar(s);
+  const c = sun.shadow.camera;
+  for (const k of ['left', 'right', 'top', 'bottom', 'near', 'far']) c[k] = SUN_BOX[k] * s;
+  c.updateProjectionMatrix();
+  sun.shadow.normalBias = 0.3 * s;
+  fill.intensity = FILL_I * s * s; // inverse-square falloff is measured in world units
+}
+
+// Pose `world` so plan point a sits at real floor point ra and plan a→b points along ra→rb.
+function poseWorld(a, b, ra, rb) {
+  const la = P(...a).multiplyScalar(XR_SCALE), lb = P(...b).multiplyScalar(XR_SCALE);
+  const heading = (v) => Math.atan2(-v.z, v.x);
+  const th = heading(rb.clone().sub(ra)) - heading(lb.sub(la));
+  world.rotation.set(0, th, 0);
+  world.position.copy(ra).sub(la.applyAxisAngle(UP, th)).setY(0);
+}
+
+function applyXRWalls() {
+  const show = xr.mode === 'immersive-vr' || xr.walls;
+  for (const { group, stub } of wallGroups) { group.visible = show; stub.visible = show; }
+  for (const o of ceilingItems) o.visible = xr.mode === 'immersive-vr';
+  roomOutline.visible = !show;
+  drawXRPanel();
+}
+
+// --- floating panel ---------------------------------------------------------
+const PW = 1024, PH = 660;
+const pCanvas = document.createElement('canvas'); pCanvas.width = PW; pCanvas.height = PH;
+const pg = pCanvas.getContext('2d');
+const pTex = new THREE.CanvasTexture(pCanvas);
+pTex.colorSpace = THREE.SRGBColorSpace;
+const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5 * PH / PW),
+  new THREE.MeshBasicMaterial({ map: pTex, transparent: true }));
+panel.visible = false;
+scene.add(panel);
+
+const BTNS = [
+  ['⟲ 90°', () => rotateBy(90)], ['⟲ 15°', () => rotateBy(15)],
+  ['⟳ 15°', () => rotateBy(-15)], ['⟳ 90°', () => rotateBy(-90)],
+  ['Align room', () => startAlign()], [() => xr.walls ? 'Hide walls' : 'Show walls', () => { xr.walls = !xr.walls; applyXRWalls(); }],
+  ['Reset bed', () => { Object.assign(bed, DEFAULT_BED); refresh(); }], ['Exit', () => renderer.xr.getSession()?.end()],
+].map(([label, run], i) => ({ label, run, x: 32 + (i % 4) * 244, y: 470 + Math.floor(i / 4) * 92, w: 228, h: 76 }));
+const hovered = new Set();
+
+function wrap(text, maxW) {
+  const lines = [''];
+  for (const w of text.split(' ')) {
+    const t = lines.at(-1) ? lines.at(-1) + ' ' + w : w;
+    if (pg.measureText(t).width > maxW && lines.at(-1)) lines.push(w); else lines[lines.length - 1] = t;
+  }
+  return lines;
+}
+
+function drawXRPanel() {
+  if (!xr.on) return;
+  const g = pg;
+  g.clearRect(0, 0, PW, PH);
+  g.fillStyle = 'rgba(24,24,27,.92)'; g.beginPath(); g.roundRect(0, 0, PW, PH, 36); g.fill();
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  g.fillStyle = '#f1f1f3'; g.font = '700 40px system-ui, sans-serif';
+  g.fillText('Bedroom planner', 36, 66);
+
+  const ok = isValid(bed);
+  g.font = '600 32px system-ui, sans-serif';
+  g.fillStyle = ok ? '#4ade80' : '#f87171';
+  g.textAlign = 'right';
+  g.fillText(ok ? '✓ Bed fits' : '✗ Overlaps a wall', PW - 36, 66);
+  if (blocksDoor(bed)) { g.fillStyle = '#fbbf24'; g.font = '600 26px system-ui, sans-serif'; g.fillText('⚠ In the door’s swing', PW - 36, 102); }
+
+  DIRS.forEach((D, i) => {
+    const x = 32 + (i % 2) * 488, y = 126 + Math.floor(i / 2) * 100, res = lastClear[i];
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect(x, y, 472, 84, 14); g.fill();
+    g.fillStyle = D.color; g.beginPath(); g.roundRect(x + 14, y + 16, 10, 52, 5); g.fill();
+    g.textAlign = 'left'; g.fillStyle = '#f1f1f3'; g.font = '600 30px system-ui, sans-serif';
+    g.fillText(`${D.arrow} ${D.label}`, x + 42, y + 53);
+    g.textAlign = 'right'; g.font = '700 40px system-ui, sans-serif';
+    g.fillText(res && isFinite(res.t) ? fmtShort(res.t) : '—', x + 452, y + 56);
+  });
+
+  const msg = xr.align ? `Point at ${ALIGN[xr.align.step].say} and pull the trigger. (${xr.align.step + 1}/2)` : xrMsg || HELP;
+  g.textAlign = 'left'; g.font = '500 28px system-ui, sans-serif';
+  g.fillStyle = xr.align ? '#93c5fd' : xrMsg ? '#fbbf24' : '#a0a0a8';
+  wrap(msg, PW - 72).slice(0, 3).forEach((l, i) => g.fillText(l, 36, 364 + i * 36));
+
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '600 30px system-ui, sans-serif';
+  BTNS.forEach((b) => {
+    const label = typeof b.label === 'function' ? b.label() : b.label;
+    g.fillStyle = hovered.has(b) ? '#2563eb' : 'rgba(255,255,255,.12)';
+    g.beginPath(); g.roundRect(b.x, b.y, b.w, b.h, 14); g.fill();
+    g.fillStyle = '#fff'; g.fillText(label, b.x + b.w / 2, b.y + b.h / 2 + 2);
+  });
+  pTex.needsUpdate = true;
+}
+
+function buttonAt(uv) {
+  const x = uv.x * PW, y = (1 - uv.y) * PH;
+  return BTNS.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
+}
+
+// Float the panel in front of the viewer, just below eye level.
+function placePanel() {
+  const head = new THREE.Vector3().setFromMatrixPosition(renderer.xr.getCamera().matrixWorld);
+  const fwd = new THREE.Vector3(0, 0, -1).transformDirection(renderer.xr.getCamera().matrixWorld).setY(0);
+  if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
+  fwd.normalize();
+  panel.position.copy(head).addScaledVector(fwd, 0.65).setY(head.y - 0.25);
+  panel.lookAt(head);
+  panel.visible = true;
+}
+
+// --- alignment ----------------------------------------------------------------
+const reticle = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.045, 32).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: '#60a5fa', depthTest: false }));
+reticle.renderOrder = 30; reticle.visible = false;
+const marker = new THREE.Mesh(new THREE.CircleGeometry(0.04, 32).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: '#60a5fa', depthTest: false }));
+marker.renderOrder = 30; marker.visible = false;
+scene.add(reticle, marker);
+
+function startAlign() {
+  xr.align = { step: 0 };
+  xr.walls = false; applyXRWalls();
+}
+
+function alignClick(point) {
+  if (xr.align.step === 0) {
+    xr.align = { step: 1, a: point.clone() };
+    marker.position.copy(point); marker.visible = true;
+    drawXRPanel();
+    return;
+  }
+  const a = xr.align.a;
+  poseWorld(ALIGN[0].p, ALIGN[1].p, a, point);
+  xr.align = null; marker.visible = false;
+  const plan = Math.hypot(ALIGN[1].p[0] - ALIGN[0].p[0], ALIGN[1].p[1] - ALIGN[0].p[1]);
+  toast(`Room aligned. You measured that wall at ${fmtLong(a.distanceTo(point) / XR_SCALE)} (plan: ${fmtLong(plan)}).`);
+}
+
+// --- controllers --------------------------------------------------------------
+const xrRay = new THREE.Raycaster();
+const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]);
+
+// What a controller points at: the panel, the bed, and/or the floor.
+function aim(c) {
+  xrRay.setFromXRController(c);
+  const res = { panel: null, bed: null, floor: null };
+  if (panel.visible) res.panel = xrRay.intersectObject(panel)[0] || null;
+  res.bed = xrRay.intersectObject(bedGroup, true).find(h => h.object.isMesh && h.object !== footFill) || null;
+  const f = new THREE.Vector3();
+  if (xrRay.ray.intersectPlane(floorPlane, f)) res.floor = f;
+  if (res.panel && res.bed && res.bed.distance < res.panel.distance) res.panel = null;
+  if (res.panel) res.bed = null;
+  return res;
+}
+
+function startDrag(c, mode) {
+  const p = rayToPlan(xrRay.ray); // xrRay still holds c's ray from aim()
+  if (!p) return;
+  xr.drag = mode === 'rotate'
+    ? { c, mode, start: Math.atan2(p[1] - bed.y, p[0] - bed.x), a0: bed.a }
+    : { c, mode, off: [bed.x - p[0], bed.y - p[1]] };
+}
+
+const controllers = [0, 1].map((i) => {
+  const c = renderer.xr.getController(i);
+  const ray = new THREE.Line(rayGeo, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6 }));
+  c.add(ray);
+  c.userData = { ray, src: null, stickLatch: false, btnPrev: false };
+  c.addEventListener('connected', (e) => { c.userData.src = e.data; });
+  c.addEventListener('disconnected', () => { c.userData.src = null; });
+  c.addEventListener('selectstart', () => {
+    const hit = aim(c);
+    if (xr.align) { if (hit.floor) alignClick(hit.floor); return; }
+    if (hit.panel) { buttonAt(hit.panel.uv)?.run(); return; }
+    if (hit.bed) startDrag(c, 'move');
+  });
+  c.addEventListener('squeezestart', () => {
+    if (!xr.align && aim(c).bed) startDrag(c, 'rotate');
+  });
+  const end = () => { if (xr.drag?.c === c) xr.drag = null; };
+  c.addEventListener('selectend', end);
+  c.addEventListener('squeezeend', end);
+  scene.add(c);
+  return c;
+});
+
+function xrFrame() {
+  if (xr.panelIn > 0 && --xr.panelIn === 0) placePanel();
+  let bedHover = false, reticleAt = null;
+  const prevHover = new Set(hovered);
+  hovered.clear();
+
+  for (const c of controllers) {
+    const { ray, src } = c.userData;
+    ray.visible = !!src;
+    if (!src) continue;
+    const hit = aim(c);
+    const d = hit.panel?.distance ?? hit.bed?.distance ?? (hit.floor ? hit.floor.distanceTo(xrRay.ray.origin) : 3);
+    ray.scale.z = Math.min(d, 5);
+    const btn = hit.panel && buttonAt(hit.panel.uv);
+    if (btn) hovered.add(btn);
+    if (hit.bed) bedHover = true;
+    ray.material.color.set(btn || hit.bed ? '#60a5fa' : '#ffffff');
+    if (xr.align && hit.floor) reticleAt = hit.floor;
+
+    const gp = src.gamepad;
+    if (gp) {
+      const x = gp.axes[2] ?? 0;
+      if (!c.userData.stickLatch && Math.abs(x) > 0.75) { c.userData.stickLatch = true; rotateBy(x > 0 ? -15 : 15); }
+      else if (Math.abs(x) < 0.3) c.userData.stickLatch = false;
+      const btnDown = [4, 5].some(k => gp.buttons[k]?.pressed);
+      if (btnDown && !c.userData.btnPrev) placePanel();
+      c.userData.btnPrev = btnDown;
+    }
+  }
+
+  if (xr.drag) {
+    xrRay.setFromXRController(xr.drag.c);
+    const p = rayToPlan(xrRay.ray);
+    if (p && xr.drag.mode === 'move') moveTo(p[0] + xr.drag.off[0], p[1] + xr.drag.off[1]);
+    else if (p) {
+      let deg = (xr.drag.a0 + Math.atan2(p[1] - bed.y, p[0] - bed.x) - xr.drag.start) * 180 / Math.PI;
+      if (opts.snap) deg = Math.round(deg / 5) * 5;
+      rotateTo(deg * Math.PI / 180, { search: false });
+    }
+  }
+  footFill.visible = !!xr.drag || bedHover;
+
+  reticle.visible = !!reticleAt;
+  if (reticleAt) {
+    reticle.position.copy(reticleAt);
+    // live preview of the second corner, so you can watch the room swing into place
+    if (xr.align?.step === 1 && reticleAt.distanceTo(xr.align.a) > 0.3) poseWorld(ALIGN[0].p, ALIGN[1].p, xr.align.a, reticleAt);
+  }
+
+  if (hovered.size !== prevHover.size || [...hovered].some(b => !prevHover.has(b))) drawXRPanel();
+}
+
+function onXRStart(mode) {
+  Object.assign(xr, { on: true, mode, walls: false, drag: null, align: null, panelIn: 3 });
+  setWorldScale(XR_SCALE);
+  // Until you align, assume you're standing just inside the entry door, facing into the room.
+  poseWorld([10, 16], [11, 16], new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1));
+  if (mode === 'immersive-ar') {
+    scene.background = null;
+    outside.visible = false;
+    grid.visible = false;
+    floor.material = shadowFloor;
+  }
+  for (const s of xrSprites) s.visible = true;
+  for (const s of featureSprites) s.visible = $('optLabels').checked;
+  applyXRWalls();
+  refresh();
+}
+
+function onXREnd() {
+  Object.assign(xr, { on: false, mode: null, drag: null, align: null });
+  setWorldScale(1);
+  world.position.set(0, 0, 0); world.rotation.set(0, 0, 0);
+  scene.background = SKY;
+  outside.visible = true;
+  grid.visible = $('optGrid').checked;
+  floor.material = M.floor;
+  for (const { stub } of wallGroups) stub.visible = true;
+  roomOutline.visible = false;
+  for (const s of xrSprites) s.visible = false;
+  panel.visible = reticle.visible = marker.visible = footFill.visible = false;
+  resize();
+}
+
+(async () => {
+  if (!navigator.xr) return;
+  for (const [mode, label] of [['immersive-ar', 'Enter mixed reality'], ['immersive-vr', 'Enter VR']]) {
+    let ok = false;
+    try { ok = await navigator.xr.isSessionSupported(mode); } catch {}
+    if (!ok) continue;
+    const b = $('enterXR');
+    b.textContent = label; b.hidden = false;
+    b.onclick = async () => {
+      try {
+        const session = await navigator.xr.requestSession(mode, {
+          requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'],
+        });
+        session.addEventListener('end', onXREnd);
+        await renderer.xr.setSession(session);
+        onXRStart(mode);
+      } catch (err) { toast(`Couldn't start XR: ${err.message}`); }
+    };
+    return;
+  }
+})();
+
+// ---------------------------------------------------------------------------
 // Resize, wall cut-away, render loop
 // ---------------------------------------------------------------------------
 function resize() {
@@ -967,12 +1349,17 @@ function updateWallVisibility() {
 setView('view3d');
 refresh();
 renderer.setAnimationLoop(() => {
+  if (renderer.xr.isPresenting) {
+    xrFrame();
+    renderer.render(scene, xrCam);
+    return;
+  }
   controls().update();
   updateWallVisibility();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 });
-window.__bed = { bed, refresh, moveTo, rotateTo, clearance, isValid, setView }; // for debugging
+window.__bed = { bed, refresh, moveTo, rotateTo, clearance, isValid, setView, xr: { onXRStart, onXREnd, poseWorld, drawXRPanel, pCanvas } }; // for debugging
 </script>
 </body>
 </html>
