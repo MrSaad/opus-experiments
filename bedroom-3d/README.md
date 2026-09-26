@@ -23,10 +23,14 @@ WebXR needs HTTPS, or `localhost`, so opening the file directly won't work. Eith
 Controls in the headset (controllers or hand pinch):
 - **Trigger** on the bed: drag it along the floor. **Grip** on the bed: drag to rotate.
 - **Thumbstick left/right**: rotate 15°. **A/B/X/Y**: bring the panel in front of you.
+- **Move the panel**: point at its background (anywhere but a button), hold the trigger or grip, and drag.
 - **Align room**: point at the floor corner where the mirror-closet wall meets the window
   wall and pull the trigger, then do the same at the other end of the window wall. The model
   snaps onto your real room and the panel shows the wall length you measured against the plan.
-  Before you align, the model assumes you started the session just inside the entry door, facing into the room.
+  The alignment is saved as a Quest persistent anchor and restored automatically next time,
+  so you only need to align once. Aligning again replaces it. Private browsing or clearing the
+  site's data forgets it.
+  Before the first alignment, the model assumes you started the session just inside the entry door, facing into the room.
 - **Show walls** swaps the wireframe for the solid modelled walls.
 
 ## What the numbers mean

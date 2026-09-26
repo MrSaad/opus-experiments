@@ -1018,9 +1018,16 @@ const ALIGN = [
   { p: [139, 0], say: 'the floor corner where the mirror-closet wall meets the window wall' },
   { p: [139, 107], say: 'the other end of the window wall, where it meets the headboard wall' },
 ];
-const HELP = 'Trigger: drag bed · Grip: rotate by dragging · Stick ←→: turn 15° · A/B/X/Y: bring this panel to you';
+const HELP = 'Trigger: drag bed · Grip: rotate by dragging · Stick ←→: turn 15° · Drag this panel by its background to move it · A/B/X/Y: bring it to you';
 
-const xr = { on: false, mode: null, walls: false, drag: null, align: null, panelIn: 0 };
+const xr = { on: false, mode: null, walls: false, drag: null, align: null, panelIn: 0, panelGrab: null, anchor: null, saveMsg: null };
+
+// The alignment is saved as a Quest persistent anchor; its handle lives in localStorage.
+const ANCHOR_KEY = 'bedroom-3d.alignAnchor';
+const savedAnchor = {
+  get() { try { return localStorage.getItem(ANCHOR_KEY); } catch { return null; } },
+  set(v) { try { v ? localStorage.setItem(ANCHOR_KEY, v) : localStorage.removeItem(ANCHOR_KEY); } catch {} },
+};
 let xrMsg = null;
 const xrCam = new THREE.PerspectiveCamera(70, 1, 0.02, 100);
 const shadowFloor = new THREE.ShadowMaterial({ opacity: 0.3 });
@@ -1085,6 +1092,9 @@ function drawXRPanel() {
   const g = pg;
   g.clearRect(0, 0, PW, PH);
   g.fillStyle = 'rgba(24,24,27,.92)'; g.beginPath(); g.roundRect(0, 0, PW, PH, 36); g.fill();
+  // grab handle
+  g.fillStyle = xr.panelGrab ? '#60a5fa' : 'rgba(255,255,255,.25)';
+  g.beginPath(); g.roundRect(PW / 2 - 70, 14, 140, 10, 5); g.fill();
   g.textBaseline = 'alphabetic'; g.textAlign = 'left';
   g.fillStyle = '#f1f1f3'; g.font = '700 40px system-ui, sans-serif';
   g.fillText('Bedroom planner', 36, 66);
@@ -1126,15 +1136,30 @@ function buttonAt(uv) {
   return BTNS.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
 }
 
+const headPos = () => new THREE.Vector3().setFromMatrixPosition(renderer.xr.getCamera().matrixWorld);
+
 // Float the panel in front of the viewer, just below eye level.
 function placePanel() {
-  const head = new THREE.Vector3().setFromMatrixPosition(renderer.xr.getCamera().matrixWorld);
+  const head = headPos();
   const fwd = new THREE.Vector3(0, 0, -1).transformDirection(renderer.xr.getCamera().matrixWorld).setY(0);
   if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
   fwd.normalize();
   panel.position.copy(head).addScaledVector(fwd, 0.65).setY(head.y - 0.25);
   panel.lookAt(head);
   panel.visible = true;
+}
+
+// Carry the panel with the controller, keeping it upright and facing you.
+function grabPanel(c) {
+  c.updateMatrixWorld();
+  xr.panelGrab = { c, offset: c.matrixWorld.clone().invert().multiply(panel.matrixWorld) };
+  drawXRPanel();
+}
+function movePanel() {
+  const { c, offset } = xr.panelGrab;
+  c.updateMatrixWorld();
+  panel.position.setFromMatrixPosition(c.matrixWorld.clone().multiply(offset));
+  panel.lookAt(headPos());
 }
 
 // --- alignment ----------------------------------------------------------------
@@ -1161,8 +1186,52 @@ function alignClick(point) {
   const a = xr.align.a;
   poseWorld(ALIGN[0].p, ALIGN[1].p, a, point);
   xr.align = null; marker.visible = false;
+  xr.anchor?.delete?.(); xr.anchor = null;
   const plan = Math.hypot(ALIGN[1].p[0] - ALIGN[0].p[0], ALIGN[1].p[1] - ALIGN[0].p[1]);
-  toast(`Room aligned. You measured that wall at ${fmtLong(a.distanceTo(point) / XR_SCALE)} (plan: ${fmtLong(plan)}).`);
+  // anchors can only be created inside a frame callback, so xrFrame() saves it
+  xr.saveMsg = `Room aligned. You measured that wall at ${fmtLong(a.distanceTo(point) / XR_SCALE)} (plan: ${fmtLong(plan)}).`;
+}
+
+// Pin the current alignment to a persistent anchor, replacing any earlier one.
+async function saveAlignment(frame, msg) {
+  const session = renderer.xr.getSession();
+  if (!frame.createAnchor) { toast(`${msg} This browser can't save it, so you'll need to align again next time.`); return; }
+  const old = savedAnchor.get();
+  if (old) { savedAnchor.set(null); await session.deletePersistentAnchor?.(old).catch(() => {}); }
+  const p = world.position, q = world.quaternion;
+  try {
+    const anchor = await frame.createAnchor(
+      new XRRigidTransform({ x: p.x, y: p.y, z: p.z }, { x: q.x, y: q.y, z: q.z, w: q.w }),
+      renderer.xr.getReferenceSpace());
+    if (xr.align || !xr.on) { anchor.delete(); return; } // re-aligning or exited meanwhile
+    xr.anchor = anchor;
+    savedAnchor.set(await anchor.requestPersistentHandle());
+    toast(`${msg} Saved for next time.`);
+  } catch (err) {
+    toast(`${msg} Couldn't save it (${err.message}), so you'll need to align again next time.`);
+  }
+}
+
+async function restoreAlignment(session) {
+  const uuid = savedAnchor.get();
+  if (!uuid || !session.restorePersistentAnchor) return;
+  try {
+    xr.anchor = await session.restorePersistentAnchor(uuid);
+    toast('Restored your saved room alignment.');
+  } catch {
+    savedAnchor.set(null);
+    toast('Your saved alignment was lost. Use Align room to set it again.');
+  }
+}
+
+// Follow the anchor: the headset refines its position as tracking improves.
+function followAnchor(frame) {
+  if (!xr.anchor || xr.align) return;
+  const pose = frame.getPose(xr.anchor.anchorSpace, renderer.xr.getReferenceSpace());
+  if (!pose) return; // not relocalised yet
+  const { position: p, orientation: o } = pose.transform;
+  world.position.set(p.x, p.y, p.z);
+  world.quaternion.set(o.x, o.y, o.z, o.w);
 }
 
 // --- controllers --------------------------------------------------------------
@@ -1200,21 +1269,29 @@ const controllers = [0, 1].map((i) => {
   c.addEventListener('selectstart', () => {
     const hit = aim(c);
     if (xr.align) { if (hit.floor) alignClick(hit.floor); return; }
-    if (hit.panel) { buttonAt(hit.panel.uv)?.run(); return; }
+    if (hit.panel) { const b = buttonAt(hit.panel.uv); if (b) b.run(); else grabPanel(c); return; }
     if (hit.bed) startDrag(c, 'move');
   });
   c.addEventListener('squeezestart', () => {
-    if (!xr.align && aim(c).bed) startDrag(c, 'rotate');
+    const hit = aim(c);
+    if (hit.panel) grabPanel(c);
+    else if (!xr.align && hit.bed) startDrag(c, 'rotate');
   });
-  const end = () => { if (xr.drag?.c === c) xr.drag = null; };
+  const end = () => {
+    if (xr.drag?.c === c) xr.drag = null;
+    if (xr.panelGrab?.c === c) { xr.panelGrab = null; drawXRPanel(); }
+  };
   c.addEventListener('selectend', end);
   c.addEventListener('squeezeend', end);
   scene.add(c);
   return c;
 });
 
-function xrFrame() {
+function xrFrame(frame) {
+  if (xr.saveMsg) { saveAlignment(frame, xr.saveMsg); xr.saveMsg = null; }
+  followAnchor(frame);
   if (xr.panelIn > 0 && --xr.panelIn === 0) placePanel();
+  if (xr.panelGrab) movePanel();
   let bedHover = false, reticleAt = null;
   const prevHover = new Set(hovered);
   hovered.clear();
@@ -1229,7 +1306,7 @@ function xrFrame() {
     const btn = hit.panel && buttonAt(hit.panel.uv);
     if (btn) hovered.add(btn);
     if (hit.bed) bedHover = true;
-    ray.material.color.set(btn || hit.bed ? '#60a5fa' : '#ffffff');
+    ray.material.color.set(btn || hit.bed || xr.panelGrab?.c === c ? '#60a5fa' : '#ffffff');
     if (xr.align && hit.floor) reticleAt = hit.floor;
 
     const gp = src.gamepad;
@@ -1266,7 +1343,7 @@ function xrFrame() {
 }
 
 function onXRStart(mode) {
-  Object.assign(xr, { on: true, mode, walls: false, drag: null, align: null, panelIn: 3 });
+  Object.assign(xr, { on: true, mode, walls: false, drag: null, align: null, panelIn: 3, panelGrab: null, anchor: null, saveMsg: null });
   setWorldScale(XR_SCALE);
   // Until you align, assume you're standing just inside the entry door, facing into the room.
   poseWorld([10, 16], [11, 16], new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1));
@@ -1283,7 +1360,7 @@ function onXRStart(mode) {
 }
 
 function onXREnd() {
-  Object.assign(xr, { on: false, mode: null, drag: null, align: null });
+  Object.assign(xr, { on: false, mode: null, drag: null, align: null, panelGrab: null, anchor: null, saveMsg: null });
   setWorldScale(1);
   world.position.set(0, 0, 0); world.rotation.set(0, 0, 0);
   scene.background = SKY;
@@ -1308,11 +1385,12 @@ function onXREnd() {
     b.onclick = async () => {
       try {
         const session = await navigator.xr.requestSession(mode, {
-          requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking'],
+          requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking', 'anchors'],
         });
         session.addEventListener('end', onXREnd);
         await renderer.xr.setSession(session);
         onXRStart(mode);
+        restoreAlignment(session);
       } catch (err) { toast(`Couldn't start XR: ${err.message}`); }
     };
     return;
@@ -1348,9 +1426,9 @@ function updateWallVisibility() {
 
 setView('view3d');
 refresh();
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((time, frame) => {
   if (renderer.xr.isPresenting) {
-    xrFrame();
+    xrFrame(frame);
     renderer.render(scene, xrCam);
     return;
   }
