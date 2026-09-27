@@ -1,0 +1,1614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manhattan Sunset</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0d0b16; overflow: hidden; }
+  body { color: #f4ece6; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #viewport { position: fixed; inset: 0; }
+  #viewport canvas { display: block; touch-action: none; }
+  .bar { position: absolute; left: 16px; right: 16px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+  .bar > * { pointer-events: auto; }
+  #top { top: 16px; }
+  #bottom { bottom: 16px; align-items: flex-end; justify-content: space-between; }
+  button {
+    font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.18); background: rgba(20,14,28,.55); color: #f4ece6;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  button:hover { border-color: rgba(255,255,255,.4); }
+  button.on { background: rgba(255,150,90,.85); border-color: transparent; color: #1a0f0a; }
+  #enterXR { background: #ff9a5a; color: #1a0f0a; border-color: transparent; font-weight: 600; }
+  .card {
+    background: rgba(20,14,28,.55); border: 1px solid rgba(255,255,255,.14); border-radius: 14px;
+    padding: 10px 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  #timeCard { display: grid; gap: 4px; min-width: 240px; }
+  #timeCard .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  #timeCard b { font-size: 15px; }
+  #timeCard span { color: rgba(244,236,230,.6); font-size: 12px; }
+  input[type=range] { width: 100%; accent-color: #ff9a5a; }
+  #hint { color: rgba(244,236,230,.7); font-size: 12px; max-width: 320px; text-align: right; }
+  #toast {
+    position: absolute; left: 50%; top: 64px; transform: translateX(-50%);
+    background: rgba(20,14,28,.85); color: #fff; padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #loading { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(244,236,230,.6); }
+  @media (max-width: 600px) {
+    #hint { display: none; }
+    #timeCard { min-width: 0; flex: 1; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="viewport">
+  <div id="loading">Loading… (needs an internet connection for three.js)</div>
+  <div class="bar" id="top">
+    <button id="viewWindow" class="on">Look outside</button>
+    <button id="viewBed">From the bed</button>
+    <button id="viewDoor">From the door</button>
+    <button id="viewRoom">Into the light</button>
+    <button id="viewOver">Overview</button>
+    <button id="sound">Sound off</button>
+    <button id="enterXR" hidden>Enter mixed reality</button>
+  </div>
+  <div class="bar" id="bottom">
+    <div class="card" id="timeCard">
+      <div class="row"><b id="todLabel">Sunset</b><span>Manhattan, 62nd floor</span></div>
+      <input type="range" id="tod" min="0" max="1" step="0.001" value="0.4" aria-label="Time of day">
+    </div>
+    <div id="hint">Drag to look around. Drag the bed to move it, <b>Shift</b>+drag to turn it.</div>
+  </div>
+  <div id="toast"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+document.getElementById('loading').remove();
+const $ = (id) => document.getElementById(id);
+
+// ---------------------------------------------------------------------------
+// Room model, identical to ../bedroom-3d (plan coordinates in inches:
+// x → right, y → up on the schematic; origin at the schematic's bottom-left).
+// ---------------------------------------------------------------------------
+const CEIL = 102;
+const WALL_T = 5;
+const BED_W = 62, BED_L = 83;
+const ROOM = [[0, 0], [139, 0], [139, 107], [26, 107], [26, 33], [0, 33]]; // CCW
+
+const WALLS = [
+  { a: [0, 0], b: [139, 0], openings: [{ s: 68, e: 109, bottom: 0, top: 84, kind: 'mirrorCloset' }] },
+  { a: [139, 0], b: [139, 107], openings: [{ s: 9, e: 83, bottom: 3, top: 96, kind: 'window' }] },
+  { a: [139, 107], b: [26, 107], openings: [] },
+  { a: [26, 107], b: [26, 33], openings: [{ s: 0, e: 69, bottom: 0, top: 84, kind: 'closet' }] },
+  { a: [26, 33], b: [0, 33], openings: [] },
+  { a: [0, 33], b: [0, 0], openings: [{ s: 1.5, e: 31.5, bottom: 0, top: 80, kind: 'door' }] },
+];
+for (const w of WALLS) {
+  const dx = w.b[0] - w.a[0], dy = w.b[1] - w.a[1];
+  w.len = Math.hypot(dx, dy);
+  w.dir = [dx / w.len, dy / w.len];
+  w.inN = [-w.dir[1], w.dir[0]];
+}
+
+const DEFAULT_BED = { x: 79, y: 65.5, a: 0 };
+const bed = { ...DEFAULT_BED };
+
+// ---------------------------------------------------------------------------
+// 2D geometry, used to keep the bed inside the walls
+// ---------------------------------------------------------------------------
+const cross = (ax, ay, bx, by) => ax * by - ay * bx;
+
+function bedCorners(s) {
+  const c = Math.cos(s.a), sn = Math.sin(s.a), hw = BED_W / 2, hl = BED_L / 2;
+  return [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]]
+    .map(([x, y]) => [s.x + x * c - y * sn, s.y + x * sn + y * c]);
+}
+
+function distToSeg(p, a, b) {
+  const vx = b[0] - a[0], vy = b[1] - a[1];
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / (vx * vx + vy * vy)));
+  return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy);
+}
+
+function inRoom(p) {
+  if (WALLS.some(w => distToSeg(p, w.a, w.b) < 1e-3)) return true;
+  let inside = false;
+  for (let i = 0, j = ROOM.length - 1; i < ROOM.length; j = i++) {
+    const [xi, yi] = ROOM[i], [xj, yj] = ROOM[j];
+    if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function side(a, b, c) {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  return cross(b[0] - a[0], b[1] - a[1], c[0] - a[0], c[1] - a[1]) / len;
+}
+
+function properCross(p1, p2, p3, p4) {
+  const e = 1e-3;
+  const d1 = side(p3, p4, p1), d2 = side(p3, p4, p2);
+  const d3 = side(p1, p2, p3), d4 = side(p1, p2, p4);
+  return ((d1 > e && d2 < -e) || (d1 < -e && d2 > e)) &&
+         ((d3 > e && d4 < -e) || (d3 < -e && d4 > e));
+}
+
+function isValid(s) {
+  const cs = bedCorners(s);
+  if (!cs.every(inRoom)) return false;
+  for (let i = 0; i < 4; i++) {
+    const a = cs[i], b = cs[(i + 1) % 4];
+    for (const w of WALLS) if (properCross(a, b, w.a, w.b)) return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Renderer and scene. Plan (x, y) maps to world (x, height, -y), in inches.
+// ---------------------------------------------------------------------------
+const P = (x, y, h = 0) => new THREE.Vector3(x, h, -y);
+const UP = new THREE.Vector3(0, 1, 0);
+const M_TO_IN = 39.37;
+const ELEV = 245; // floor height above the street, metres (about the 62nd floor)
+
+const viewport = $('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+renderer.setClearColor(0x000000, 0);
+viewport.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+// Everything lives in `world`, in inches. In XR it is scaled to metres and
+// posed onto the real floor; on desktop it stays at identity.
+const world = new THREE.Group();
+scene.add(world);
+const pmrem = new THREE.PMREMGenerator(renderer);
+
+const persp = new THREE.PerspectiveCamera(70, 1, 2, 20000 * M_TO_IN);
+let camera = persp;
+
+// ---------------------------------------------------------------------------
+// Time of day. tod 0 = golden hour, 0.5 = the sun on the horizon, 1 = dusk.
+// The sun sits outside the window, a little toward the mirror-closet side.
+// ---------------------------------------------------------------------------
+const SUN_AZ = Math.atan(0.22); // angle of the sun off the window's normal
+const KEYS = {
+  zenith:     ['#35508a', '#2a3570', '#0f1433'],
+  horizon:    ['#e8b07c', '#f08a5a', '#7a3f60'],
+  antiHz:     ['#a898b4', '#8a6c92', '#2c2448'],
+  glow:       ['#ffc98a', '#ff8a45', '#b8483a'],
+  sunCol:     ['#fff0d0', '#ffb070', '#ff7040'],
+  cloudLit:   ['#ffd0a0', '#ff8f80', '#a04a78'],
+  cloudDark:  ['#6a6a90', '#584a80', '#221a38'],
+  light:      ['#ffc080', '#ff9048', '#ff6a3a'],
+  hemiSky:    ['#8088b8', '#7060a0', '#2a2658'],
+  hemiGround: ['#5a4238', '#4a3030', '#1c1418'],
+  ambSky:     ['#46507a', '#3a3a6a', '#141630'],
+  ambGround:  ['#3a2a28', '#2a1c20', '#0c0a10'],
+  wash:       ['#3a2448', '#361c48', '#120a24'],
+};
+const NUMS = {
+  litFrac: [0.06, 0.16, 0.5], litGain: [0.45, 0.75, 1.4], lights: [0.25, 0.8, 1.5],
+  fogDen: [1 / 7500, 1 / 6000, 1 / 4800], hemiI: [0.9, 0.65, 0.35], envI: [0.35, 0.3, 0.18],
+  washA: [0.16, 0.24, 0.42],
+};
+const lerp3 = (arr, t) => t < 0.5 ? arr[0] + (arr[1] - arr[0]) * t * 2 : arr[1] + (arr[2] - arr[1]) * (t - 0.5) * 2;
+const COLS = Object.fromEntries(Object.entries(KEYS).map(([k, v]) => [k, v.map(c => new THREE.Color(c))]));
+function lerpCol(k, t, out) {
+  const [a, b, c] = COLS[k];
+  return t < 0.5 ? out.copy(a).lerp(b, t * 2) : out.copy(b).lerp(c, (t - 0.5) * 2);
+}
+
+const sunL = new THREE.Vector3();     // toward the sun, room frame
+const sunCity = new THREE.Vector3();  // toward the sun, city frame
+const U = {                           // uniforms shared by the outdoor shaders
+  uSun: { value: sunCity }, uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() },
+  uGlow: { value: new THREE.Color() }, uAntiHz: { value: new THREE.Color() }, uSunCol: { value: new THREE.Color() },
+  uCloudLit: { value: new THREE.Color() }, uCloudDark: { value: new THREE.Color() },
+  uAmbSky: { value: new THREE.Color() }, uAmbGround: { value: new THREE.Color() },
+  uTime: { value: 0 }, uFogDen: { value: 1 / 4000 }, uToCity: { value: new THREE.Matrix4() },
+  uLitFrac: { value: 0.2 }, uLitGain: { value: 1 }, uLights: { value: 1 }, uSunUp: { value: 1 },
+  uPx: { value: 800 },
+};
+// uniforms for the in-room light shafts and dust
+const RU = {
+  uSunL: { value: sunL }, uInvWorld: { value: new THREE.Matrix4() }, uBeamCol: { value: new THREE.Color() },
+  uBeam: { value: 1 }, uTime: U.uTime, uPx: U.uPx,
+};
+
+let tod = 0.4;
+
+// ---------------------------------------------------------------------------
+// Shared GLSL: sky, haze and fog, all in the city frame (metres, y up, +x
+// toward the sunset).
+// ---------------------------------------------------------------------------
+const GLSL = /* glsl */`
+uniform vec3 uSun, uZenith, uHorizon, uAntiHz, uGlow, uSunCol, uCloudLit, uCloudDark, uAmbSky, uAmbGround;
+uniform float uTime, uFogDen, uLitFrac, uLitGain, uLights, uSunUp, uPx;
+uniform mat4 uToCity;
+float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
+  return mix(mix(hash12(i), hash12(i + vec2(1, 0)), u.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), u.x), u.y);
+}
+float fbm(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.03 + vec2(1.7, 9.2); a *= .5; } return s; }
+vec3 haze(vec3 d) {
+  vec2 h = normalize(d.xz + vec2(1e-5));
+  float s = dot(h, normalize(uSun.xz));
+  vec3 c = mix(uAntiHz, uHorizon, smoothstep(-1., .7, s));
+  return mix(c, uGlow, pow(max(s, 0.), 4.) * .9);
+}
+vec3 sky(vec3 d, bool clouds) {
+  float y = d.y, sd = max(dot(d, uSun), 0.);
+  vec3 hz = haze(d);
+  vec3 c = mix(uZenith, hz, pow(1. - clamp(y, 0., 1.), 4.));
+  c += uGlow * (pow(sd, 10.) * .35 + pow(sd, 200.) * .9);
+  c += uSunCol * smoothstep(.99986, .99993, dot(d, uSun)) * 6.;
+  if (y < 0.) return mix(hz, hz * .35, clamp(-y * 6., 0., 1.));
+  if (clouds) {
+    vec2 uv = d.xz / (y + .04) * .35 + vec2(uTime * .004, 0.);
+    float n = fbm(uv * vec2(1., 3.5));
+    float band = smoothstep(.01, .06, y) * (1. - smoothstep(.15, .5, y));
+    float cov = smoothstep(.52, .78, n) * band;
+    vec3 cc = mix(uCloudDark, uCloudLit, clamp(pow(sd, 3.) * .8 + (n - .5) * .8 + .25, 0., 1.));
+    cc += uGlow * pow(sd, 30.) * .6;
+    c = mix(c, cc, cov * .9);
+  }
+  return c;
+}
+vec3 fogged(vec3 c, vec3 p, vec3 cam) {
+  vec3 v = p - cam; float dist = length(v);
+  return mix(c, haze(v / dist), 1. - exp(-dist * uFogDen));
+}
+vec3 camCity() { return (uToCity * vec4(cameraPosition, 1.)).xyz; }
+`;
+const OUT = '\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n';
+
+function outdoorMat(vertex, fragment, extra = {}) {
+  return new THREE.ShaderMaterial({ uniforms: U, vertexShader: GLSL + vertex, fragmentShader: GLSL + fragment, ...extra });
+}
+
+// ---------------------------------------------------------------------------
+// Lights
+// ---------------------------------------------------------------------------
+const hemi = new THREE.HemisphereLight('#8088b8', '#4a3030', 0.7);
+world.add(hemi);
+const sun = new THREE.DirectionalLight('#ff9048', 4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -150, right: 150, top: 150, bottom: -150, near: 10, far: 900 });
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.4;
+sun.target.position.copy(P(80, 55, 30));
+world.add(sun, sun.target);
+// sunlight bouncing off the lit patch on the floor and far wall
+const bounce = new THREE.PointLight('#ff9a60', 0, 0, 2);
+bounce.position.copy(P(45, 60, 30));
+world.add(bounce);
+
+// ---------------------------------------------------------------------------
+// Materials
+// ---------------------------------------------------------------------------
+function carpetTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#48484b'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 9000; i++) {
+    const v = 50 + Math.random() * 40 | 0;
+    g.fillStyle = `rgb(${v},${v},${v + 3})`;
+    g.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1 / 24, 1 / 24);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const M = {
+  wall: new THREE.MeshStandardMaterial({ color: '#77777a', roughness: 0.92 }),
+  floor: new THREE.MeshStandardMaterial({ map: carpetTexture(), roughness: 1 }),
+  ceil: new THREE.MeshStandardMaterial({ color: '#f4f4f2', roughness: 0.95, side: THREE.BackSide }),
+  bulk: new THREE.MeshStandardMaterial({ color: '#f4f4f2', roughness: 0.95 }),
+  trim: new THREE.MeshStandardMaterial({ color: '#f2f2ef', roughness: 0.55 }),
+  door: new THREE.MeshStandardMaterial({ color: '#eeeeea', roughness: 0.5 }),
+  metal: new THREE.MeshStandardMaterial({ color: '#b9b9bd', metalness: 0.9, roughness: 0.3 }),
+  dark: new THREE.MeshStandardMaterial({ color: '#2b2b2e', metalness: 0.5, roughness: 0.5 }),
+  mirror: new THREE.MeshStandardMaterial({ color: '#c9ced2', metalness: 1, roughness: 0.12, envMapIntensity: 1.2 }),
+  glass: new THREE.MeshPhysicalMaterial({ color: '#ffe8d8', transparent: true, opacity: 0.06, roughness: 0.02, metalness: 0, depthWrite: false }),
+  curtain: new THREE.MeshStandardMaterial({ color: '#c9bba9', roughness: 0.95, side: THREE.DoubleSide }),
+  wood: new THREE.MeshStandardMaterial({ color: '#3a2922', roughness: 0.55 }),
+  linen: new THREE.MeshStandardMaterial({ color: '#f3f3f1', roughness: 0.95 }),
+  duvet: new THREE.MeshStandardMaterial({ color: '#fbfbfa', roughness: 0.9 }),
+};
+
+// In passthrough the room's surfaces are drawn with this instead: see-through,
+// except for a dusky tint and the sunlight that falls through the window
+// (read from the same shadow map as the virtual room). It still writes depth,
+// so the city only shows through the window.
+const overlayU = {
+  uSunW: { value: new THREE.Vector3(1, 0, 0) },
+  uWash: { value: new THREE.Color() }, uWashA: { value: 0.2 },
+  uPatch: { value: new THREE.Color() }, uPatchA: { value: 0.5 },
+};
+const overlayMat = new THREE.ShadowMaterial({ side: THREE.DoubleSide, toneMapped: false });
+Object.assign(overlayMat, {
+  transparent: false, depthWrite: true,
+  // premultiplied-alpha "over", without being sorted into the transparent pass
+  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+  blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+  blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+});
+overlayMat.onBeforeCompile = (sh) => {
+  Object.assign(sh.uniforms, overlayU);
+  sh.vertexShader = 'varying vec3 vWN;\n' + sh.vertexShader.replace('#include <fog_vertex>',
+    '#include <fog_vertex>\n\tvWN = inverseTransformDirection( transformedNormal, viewMatrix );');
+  sh.fragmentShader = 'varying vec3 vWN;\nuniform vec3 uSunW, uWash, uPatch;\nuniform float uWashA, uPatchA;\n' +
+    sh.fragmentShader.replace('gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) );', `
+      vec3 n = normalize(vWN) * (gl_FrontFacing ? 1.0 : -1.0);
+      float ndl = dot(n, uSunW);
+      float lit = getShadowMask() * smoothstep(0.0, 0.05, ndl) * mix(0.55, 1.0, ndl);
+      gl_FragColor = vec4(mix(uWash, uPatch, lit), mix(uWashA, uPatchA, lit));`);
+};
+overlayMat.customProgramCacheKey = () => 'room-overlay';
+
+function box(w, h, d, mat, x = 0, y = 0, z = 0, shadows = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = m.receiveShadow = shadows;
+  return m;
+}
+
+// ---------------------------------------------------------------------------
+// Room
+// ---------------------------------------------------------------------------
+// Meshes tagged `real` are things that exist in the physical room; passthrough
+// swaps their material for the overlay. `glass` and `curtain` are hidden there.
+const tag = (m, t) => { m.userData.tag = t; return m; };
+
+const floorShape = new THREE.Shape(ROOM.map(([x, y]) => new THREE.Vector2(x, y)));
+const floor = tag(new THREE.Mesh(new THREE.ShapeGeometry(floorShape), M.floor), 'real');
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+world.add(floor);
+
+const ceilingItems = [];
+{
+  const ceil = tag(new THREE.Mesh(new THREE.ShapeGeometry(floorShape), M.ceil), 'real');
+  ceil.rotation.x = -Math.PI / 2;
+  ceil.position.y = CEIL;
+  ceil.receiveShadow = true;
+  const bulk = tag(box(113, 12, 16, M.bulk, 0, 0, 0, false), 'real');
+  bulk.position.copy(P(26 + 113 / 2, 107 - 8, CEIL - 6));
+  const bulkSide = tag(box(113, 12, 0.2, M.wall, 0, 0, 0, false), 'real');
+  bulkSide.position.copy(P(26 + 113 / 2, 107 - 16.1, CEIL - 6));
+  bulk.receiveShadow = bulkSide.receiveShadow = true;
+  ceilingItems.push(ceil, bulk, bulkSide);
+  world.add(ceil, bulk, bulkSide);
+}
+
+function isConvexCorner(k) {
+  const prev = WALLS[(k + WALLS.length - 1) % WALLS.length].dir, next = WALLS[k].dir;
+  return cross(prev[0], prev[1], next[0], next[1]) > 0;
+}
+
+// Each wall is a group in its own frame: local +x runs from a to b, local −z
+// points into the room, the wall body sits in z ∈ [0, WALL_T].
+const wallGroups = [];
+WALLS.forEach((w, k) => {
+  const g = new THREE.Group();
+  g.position.copy(P(...w.a));
+  g.rotation.y = Math.atan2(w.dir[1], w.dir[0]);
+  const ext0 = isConvexCorner(k) ? WALL_T : 0;
+  const ext1 = isConvexCorner((k + 1) % WALLS.length) ? WALL_T : 0;
+  const zc = WALL_T / 2;
+  let cursor = -ext0;
+  const solid = (s, e, h0, h1) => {
+    if (e - s < 0.01 || h1 - h0 < 0.01) return;
+    g.add(box(e - s, h1 - h0, WALL_T, M.wall, (s + e) / 2, (h0 + h1) / 2, zc));
+    if (h0 === 0) {
+      const bs = Math.max(s, 0), be = Math.min(e, w.len);
+      if (be - bs > 0.5) g.add(box(be - bs, 4, 0.6, M.trim, (bs + be) / 2, 2, -0.3, false));
+    }
+  };
+  for (const o of [...w.openings].sort((p, q) => p.s - q.s)) {
+    solid(cursor, o.s, 0, CEIL);
+    solid(o.s, o.e, 0, o.bottom);
+    solid(o.s, o.e, o.top, CEIL);
+    buildOpening(g, o);
+    cursor = o.e;
+  }
+  solid(cursor, w.len + ext1, 0, CEIL);
+  g.traverse(o => { if (o.isMesh && !o.userData.tag) tag(o, 'real'); });
+  world.add(g);
+  wallGroups.push({ wall: w, group: g });
+});
+
+function buildOpening(g, o) {
+  const W = o.e - o.s, mid = (o.s + o.e) / 2, H = o.top - o.bottom;
+  const casing = () => {
+    g.add(box(2.5, H + 2.5, 0.8, M.trim, o.s - 1.25, o.bottom + (H + 2.5) / 2, -0.4));
+    g.add(box(2.5, H + 2.5, 0.8, M.trim, o.e + 1.25, o.bottom + (H + 2.5) / 2, -0.4));
+    g.add(box(W + 5, 2.5, 0.8, M.trim, mid, o.top + 1.25, -0.4));
+  };
+  if (o.kind === 'window') {
+    const zc = WALL_T / 2;
+    g.add(tag(box(W, H, 0.3, M.glass, mid, o.bottom + H / 2, zc, false), 'glass'));
+    const fr = (w, h, x, y) => g.add(tag(box(w, h, 2.2, M.trim, x, y, zc), 'frame'));
+    fr(W, 2, mid, o.bottom + 1); fr(W, 2, mid, o.top - 1);
+    fr(2, H, o.s + 1, o.bottom + H / 2); fr(2, H, o.e - 1, o.bottom + H / 2);
+    for (const f of [0.34, 0.8]) fr(1.6, H, o.s + W * f, o.bottom + H / 2);
+    for (const h of [18, 80]) fr(W, 1.6, mid, h);
+    const rod = tag(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, W + 26, 12), M.dark), 'curtain');
+    rod.rotation.z = Math.PI / 2; rod.position.set(mid, CEIL - 4, -4); g.add(rod);
+    for (const x of [o.s - 3, o.e + 3]) g.add(tag(curtain(x, -4, 18, CEIL - 5), 'curtain'));
+  } else if (o.kind === 'mirrorCloset' || o.kind === 'closet') {
+    casing();
+    const mat = o.kind === 'mirrorCloset' ? M.mirror : M.door;
+    const pw = W / 2 + 1;
+    g.add(box(pw, H, 1, mat, o.s + pw / 2, o.bottom + H / 2, 1.2));
+    g.add(box(pw, H, 1, mat, o.e - pw / 2, o.bottom + H / 2, 2.5));
+    if (o.kind === 'closet') g.add(box(W + 5, 7, 1, M.trim, mid, o.top - 3.5, -0.9));
+  } else if (o.kind === 'door') {
+    casing();
+    g.add(box(W, H, 1.75, M.door, mid, H / 2, 1.2));
+    g.add(box(4.5, 0.8, 0.8, M.metal, o.s + 4.5, 36, -0.6, false), box(1.2, 1.2, 1.4, M.metal, o.s + 2.5, 36, -0.1, false));
+  }
+}
+
+function curtain(x, z, width, height) {
+  const geo = new THREE.PlaneGeometry(width, height, 28, 1);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setZ(i, Math.sin(pos.getX(i) * 1.1) * 1.4);
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, M.curtain);
+  m.position.set(x, 1 + height / 2, z);
+  m.castShadow = true;
+  return m;
+}
+
+const realMeshes = [], glassMeshes = [], curtainMeshes = [];
+world.traverse(o => {
+  if (!o.isMesh) return;
+  const t = o.userData.tag;
+  if (t === 'real') { realMeshes.push(o); o.userData.mat = o.material; o.renderOrder = -10; }
+  else if (t === 'glass') glassMeshes.push(o);
+  else if (t === 'curtain') curtainMeshes.push(o);
+});
+
+// Wireframe of the room's corners, shown while aligning the room in XR.
+const roomOutline = (() => {
+  const pts = [];
+  ROOM.forEach((p, i) => {
+    const q = ROOM[(i + 1) % ROOM.length];
+    for (const h of [0.3, CEIL]) pts.push(P(...p, h), P(...q, h));
+    pts.push(P(...p, 0), P(...p, CEIL));
+  });
+  const l = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7 }));
+  l.visible = false;
+  world.add(l);
+  return l;
+})();
+
+// ---------------------------------------------------------------------------
+// The city. Its own frame is in metres with the origin on the street below the
+// room, +x pointing at the sunset down a cross street to the Hudson.
+// ---------------------------------------------------------------------------
+const city = new THREE.Group();
+city.position.copy(P(69.5, 53.5, -ELEV * M_TO_IN));
+city.rotation.y = -SUN_AZ;
+city.scale.setScalar(M_TO_IN);
+world.add(city);
+
+let seed = 20260927;
+const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const pick = (a) => a[Math.floor(rnd() * a.length)];
+
+// Sky dome
+const skyMat = outdoorMat(`
+  varying vec3 vPos;
+  void main() { vPos = position + vec3(0., ${ELEV}., 0.); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`, `
+  varying vec3 vPos;
+  void main() { gl_FragColor = vec4(sky(normalize(vPos - camCity()), true), 1.); ${OUT} }`,
+  { side: THREE.BackSide, depthWrite: false });
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(14000, 48, 24), skyMat);
+skyDome.position.y = ELEV;
+skyDome.renderOrder = 2; // after everything opaque, so hidden pixels are skipped
+city.add(skyDome);
+
+// Ground (both banks) and the Hudson
+const EAST_SHORE = 1085, WEST_SHORE = 2350;
+{
+  const groundMat = outdoorMat(`
+    varying vec3 vPos;
+    void main() { vec4 p = modelMatrix * vec4(position, 1.); vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`, `
+    varying vec3 vPos;
+    void main() {
+      float n = hash12(floor(vPos.xz / 6.));
+      vec3 c = vec3(.035, .032, .036) * (.8 + .4 * n) + uAmbSky * .12 + vec3(1., .55, .25) * .018 * uLights;
+      gl_FragColor = vec4(fogged(c, vPos, camCity()), 1.); ${OUT} }`);
+  const plane = (x0, x1) => {
+    const g = new THREE.PlaneGeometry(x1 - x0, 30000).rotateX(-Math.PI / 2).translate((x0 + x1) / 2, 0, 0);
+    city.add(new THREE.Mesh(g, groundMat));
+  };
+  plane(-4000, EAST_SHORE);
+  plane(WEST_SHORE, 14000);
+  const waterMat = outdoorMat(`
+    varying vec3 vPos;
+    void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`, `
+    varying vec3 vPos;
+    void main() {
+      vec3 cam = camCity(); vec3 V = normalize(vPos - cam);
+      vec2 w = vPos.xz * vec2(.05, .09) + vec2(uTime * .06, uTime * .03);
+      vec3 n = normalize(vec3((vnoise(w) - .5) * .14 + (vnoise(w * 3.1) - .5) * .07, 1., (vnoise(w + 5.) - .5) * .1));
+      vec3 R = reflect(V, n); R.y = abs(R.y);
+      float fres = .04 + .96 * pow(1. - max(dot(-V, n), 0.), 5.);
+      vec3 c = mix(vec3(.008, .012, .02), sky(R, false), fres);
+      gl_FragColor = vec4(fogged(c, vPos, cam), 1.); ${OUT} }`);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(WEST_SHORE - EAST_SHORE, 30000).rotateX(-Math.PI / 2)
+    .translate((EAST_SHORE + WEST_SHORE) / 2, -0.5, 0), waterMat);
+  city.add(water);
+}
+
+// Buildings: one instanced box, with windows, sunlight and haze drawn by the shader.
+const lots = []; // [cx, cz, sx, sz, h, glass, shadowH, color, rotY]
+const lights = []; // point lights: [x, y, z, dirx, dirz, len, speed, phase, size, r, g, b, kind]
+{
+  const MASONRY = ['#8a7b6c', '#9b8f82', '#6f6660', '#a39a8f', '#7c6f66', '#5d5752', '#b0a597'];
+  const GLASSY = ['#3b4656', '#2f3a48', '#46525e', '#394350'];
+  const addLot = (cx, cz, sx, sz, h, glass, rot = 0) => {
+    const shadowH = Math.max(0, rnd() * rnd() * 160); // lower floors in the shadow of buildings to the west
+    lots.push([cx, cz, sx, sz, h, glass, shadowH, pick(glass ? GLASSY : MASONRY), rot]);
+    if (h > 170 && rnd() < 0.7) lights.push([cx, h + 2, cz, 0, 0, 0, 0, rnd() * 9, 2.5, 1, 0.08, 0.05, 2]);
+  };
+  const AVE = (j) => 30 + 260 * j; // avenue centre lines (run along z), 30 m wide
+  const STREET = (k) => 80 * k;     // cross street centre lines (run along x), 20 m wide
+  // Manhattan: blocks between avenues j..j+1 and streets k..k+1
+  for (let j = -4; j <= 3; j++) {
+    for (let k = -38; k < 38; k++) {
+      const x0 = AVE(j) + 15, x1 = AVE(j + 1) - 15, z0 = STREET(k) + 10, z1 = STREET(k + 1) - 10;
+      let x = x0;
+      while (x < x1 - 8) {
+        const w = Math.min(x1 - x, 18 + rnd() * 45);
+        const halves = rnd() < 0.5 ? [[z0, z1]] : [[z0, (z0 + z1) / 2], [(z0 + z1) / 2, z1]];
+        for (const [za, zb] of halves) {
+          const cx = x + w / 2, cz = (za + zb) / 2;
+          // leave room for our own tower
+          if (cx > -80 && cx < 16 && Math.abs(cz) < 55) continue;
+          const r = rnd();
+          let h = 18 + 150 * Math.pow(r, 2.4);
+          if (rnd() < 0.06) h = 220 + rnd() * 200;
+          if (j === 3) h *= 0.6;                            // lower toward the river
+          const dist = Math.hypot(cx, cz);
+          if (cx > 0 && Math.abs(cz) < cx * 0.55 && dist < 1500) h = Math.min(h, ELEV * (0.55 + 0.25 * rnd())); // keep the view
+          h *= 1 - Math.min(0.5, Math.abs(cz) / 6000);
+          const glass = h > 150 ? rnd() < 0.6 : rnd() < 0.12;
+          const inset = 1 + rnd() * 2;
+          addLot(cx, cz, w - inset, zb - za - inset, h, glass);
+          if (h > 110 && rnd() < 0.5) { // setback
+            const f = 0.55 + rnd() * 0.25;
+            addLot(cx, cz, (w - inset) * f, (zb - za - inset) * f, h * (1.1 + rnd() * 0.25), glass);
+          }
+        }
+        x += w;
+      }
+    }
+  }
+  // a stepped art deco tower to the south and a pair of glass supertalls to the north
+  const deco = [[130, 60, 90], [80, 50, 200], [45, 34, 290], [22, 18, 320], [5, 5, 380]];
+  for (const [sx, sz, h] of deco) addLot(640, -420, sx, sz, h, false);
+  lights.push([640, 382, -420, 0, 0, 0, 0, 0, 3, 1, 0.08, 0.05, 2]);
+  addLot(900, 380, 55, 50, 395, true); addLot(900, 380, 30, 26, 420, true);
+  addLot(960, 560, 50, 45, 330, true);
+  // New Jersey: low-rise, with a cluster of towers down the shore
+  for (let i = 0; i < 900; i++) {
+    const cx = WEST_SHORE + 40 + Math.pow(rnd(), 1.4) * 5000, cz = (rnd() - 0.5) * 12000;
+    addLot(cx, cz, 15 + rnd() * 40, 15 + rnd() * 40, 8 + Math.pow(rnd(), 3) * 45, false);
+  }
+  for (let i = 0; i < 26; i++) {
+    const cx = WEST_SHORE + 80 + rnd() * 400, cz = -700 - rnd() * 2200;
+    addLot(cx, cz, 30 + rnd() * 30, 30 + rnd() * 30, 90 + rnd() * 160, rnd() < 0.7);
+  }
+  for (let i = 0; i < 10; i++) {
+    const cx = WEST_SHORE + 60 + rnd() * 300, cz = 900 + rnd() * 1800;
+    addLot(cx, cz, 25 + rnd() * 25, 25 + rnd() * 25, 60 + rnd() * 80, rnd() < 0.5);
+  }
+  // our own tower, below the room and square to it rather than to the street grid
+  const c = new THREE.Vector3(-19.05, 0, 0).applyAxisAngle(UP, SUN_AZ);
+  lots.push([c.x, c.z, 41.9, 50, ELEV - 0.2, 0, 0, '#5d5752', SUN_AZ]);
+
+  // Traffic: headlights one way, tail lights the other; plus street lights
+  const lane = (x, z, dx, dz, len, n, speed, col) => {
+    for (let i = 0; i < n; i++) lights.push([x, 1, z, dx, dz, len, speed * (0.8 + rnd() * 0.4), rnd() * len, 1.3, ...col, 1]);
+  };
+  const HEAD = [1, 0.93, 0.8], TAIL = [1, 0.1, 0.06];
+  for (let j = 0; j <= 4; j++) {
+    const n = j === 4 ? 220 : 90;
+    lane(AVE(j) - 4, -3000, 0, 1, 6000, n, 9, HEAD);
+    lane(AVE(j) + 4, 3000, 0, -1, 6000, n, 9, TAIL);
+    for (let z = -3000; z < 3000; z += 32) for (const s of [-14, 14]) lights.push([AVE(j) + s, 8, z, 0, 0, 0, 0, 0, 1.6, 1, 0.62, 0.3, 0]);
+  }
+  for (let k = -37; k <= 37; k++) {
+    lane(45, STREET(k) - 3, 1, 0, 1010, 10, 7, HEAD);
+    lane(1055, STREET(k) + 3, -1, 0, 1010, 10, 7, TAIL);
+    for (let x = 50; x < 1050; x += 30) for (const s of [-9, 9]) lights.push([x, 7, STREET(k) + s, 0, 0, 0, 0, 0, 1.4, 1, 0.62, 0.3, 0]);
+  }
+  for (let i = 0; i < 4; i++) lights.push([EAST_SHORE + 200 + rnd() * 800, 3, -3000, 0, 1, 6000, 3 + rnd() * 3, rnd() * 6000, 2, 1, 0.95, 0.85, 1]);
+  // New Jersey street lights, a scattered glow
+  for (let i = 0; i < 2500; i++) lights.push([WEST_SHORE + 30 + Math.pow(rnd(), 1.3) * 5000, 6, (rnd() - 0.5) * 12000, 0, 0, 0, 0, 0, 1.8, 1, 0.65, 0.35, 0]);
+}
+
+const buildings = (() => {
+  const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const n = lots.length;
+  const aSize = new Float32Array(n * 3), aInfo = new Float32Array(n * 4), aColor = new Float32Array(n * 3);
+  const mat = outdoorMat(`
+    attribute vec3 aSize; attribute vec4 aInfo; attribute vec3 aColor;
+    varying vec3 vLocal, vN, vNc, vPos, vCol; varying vec4 vInfo;
+    void main() {
+      vLocal = position * aSize; vN = normal; vInfo = aInfo; vCol = aColor;
+      vec4 p = instanceMatrix * vec4(position, 1.);
+      vPos = p.xyz; vNc = normalize(mat3(instanceMatrix) * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * p;
+    }`, `
+    varying vec3 vLocal, vN, vNc, vPos, vCol; varying vec4 vInfo;
+    void main() {
+      vec3 cam = camCity(), n = normalize(vNc), V = normalize(vPos - cam);
+      float glass = vInfo.y;
+      float sunVis = uSunUp * smoothstep(vInfo.z - 15., vInfo.z + 15., vPos.y);
+      float ndl = max(dot(n, uSun), 0.);
+      vec3 amb = mix(uAmbGround, uAmbSky, n.y * .5 + .5);
+      vec3 wall = vCol * (amb + uSunCol * ndl * sunVis * 1.6);
+      vec3 col = wall;
+      if (abs(vN.y) < .5) {
+        float u = abs(vN.x) > .5 ? vLocal.z : vLocal.x;
+        vec2 g = vec2(u / mix(2.6, 1.7, glass) + vInfo.x * 13.7, vLocal.y / 3.7);
+        vec2 cell = floor(g), f = fract(g);
+        float win = step(mix(.2, .06, glass), f.x) * step(f.x, mix(.8, .94, glass)) * step(.25, f.y) * step(f.y, mix(.85, .96, glass));
+        win *= step(1.5, g.y);
+        float h = hash12(cell + vInfo.x * 91.3 + vN.xz * 17.);
+        vec3 R = reflect(V, n);
+        float rs = max(dot(R, uSun), 0.);
+        vec3 refl = mix(uZenith, haze(R), 1. - clamp(R.y, 0., 1.)) + uGlow * pow(rs, 8.) * .8 + uSunCol * pow(rs, 150.) * 4. * sunVis;
+        float fres = .25 + .75 * pow(1. - max(dot(-V, n), 0.), 3.);
+        vec3 gc = mix(vec3(.015, .018, .03), refl, fres * mix(.5, .9, glass));
+        vec3 lc = mix(vec3(1., .72, .42), vec3(.85, .92, 1.), step(.8, fract(h * 7.3))) * uLitGain * (.6 + .8 * fract(h * 13.1));
+        vec3 detail = mix(wall, gc + lc * step(h, uLitFrac), win);
+        // far away the window grid is smaller than a pixel: use its average
+        vec3 avg = mix(wall, gc + lc * .9 * uLitFrac, mix(.35, .8, glass));
+        float aa = clamp(1.6 - max(fwidth(g.x), fwidth(g.y)) * 1.6, 0., 1.);
+        col = mix(avg, detail, aa);
+      } else {
+        col *= .55;
+      }
+      gl_FragColor = vec4(fogged(col, vPos, cam), 1.); ${OUT}
+    }`);
+  const mesh = new THREE.InstancedMesh(geo, mat, n);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), col = new THREE.Color();
+  lots.forEach(([cx, cz, sx, sz, h, glass, shadowH, color, rot], i) => {
+    q.setFromAxisAngle(UP, rot);
+    m4.compose(new THREE.Vector3(cx, 0, cz), q, new THREE.Vector3(sx, h, sz));
+    mesh.setMatrixAt(i, m4);
+    aSize.set([sx, h, sz], i * 3);
+    aInfo.set([rnd(), glass ? 1 : 0, shadowH, 0], i * 4);
+    col.set(color).multiplyScalar(0.8 + rnd() * 0.3);
+    aColor.set([col.r, col.g, col.b], i * 3);
+  });
+  geo.setAttribute('aSize', new THREE.InstancedBufferAttribute(aSize, 3));
+  geo.setAttribute('aInfo', new THREE.InstancedBufferAttribute(aInfo, 4));
+  geo.setAttribute('aColor', new THREE.InstancedBufferAttribute(aColor, 3));
+  mesh.computeBoundingSphere();
+  mesh.renderOrder = 1;
+  city.add(mesh);
+  return mesh;
+})();
+
+// Cars, street lights and aircraft beacons: one point cloud, moved on the GPU.
+{
+  const n = lights.length;
+  const pos = new Float32Array(n * 3), dir = new Float32Array(n * 3), move = new Float32Array(n * 4),
+        col = new Float32Array(n * 3), kind = new Float32Array(n);
+  lights.forEach(([x, y, z, dx, dz, len, speed, phase, size, r, g, b, k], i) => {
+    pos.set([x, y, z], i * 3); dir.set([dx, 0, dz], i * 3);
+    move.set([len, speed, phase, size], i * 4); col.set([r, g, b], i * 3); kind[i] = k;
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aDir', new THREE.BufferAttribute(dir, 3));
+  geo.setAttribute('aMove', new THREE.BufferAttribute(move, 4));
+  geo.setAttribute('aColor', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aKind', new THREE.BufferAttribute(kind, 1));
+  const mat = outdoorMat(`
+    attribute vec3 aDir, aColor; attribute vec4 aMove; attribute float aKind;
+    varying vec3 vCol;
+    void main() {
+      vec3 p = position;
+      if (aMove.y != 0.) p += aDir * mod(aMove.z + uTime * aMove.y, aMove.x);
+      float dist = length(p - camCity());
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.);
+      float gain = aKind < .5 ? uLights : aKind < 1.5 ? .4 + .6 * uLights : 2. * step(.6, fract(uTime * .5 + aMove.z * .13));
+      float px = aMove.w * uPx / dist;
+      vCol = aColor * gain * exp(-dist * uFogDen * 1.3) * min(px / 1.5, 1.);
+      gl_PointSize = clamp(px, 1.5, 12.);
+    }`, `
+    varying vec3 vCol;
+    void main() {
+      float a = smoothstep(.5, .05, length(gl_PointCoord - .5));
+      gl_FragColor = vec4(vCol * a, 1.);
+      #include <colorspace_fragment>
+    }`, { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  pts.renderOrder = 3;
+  city.add(pts);
+}
+
+// ---------------------------------------------------------------------------
+// Sunlight inside: shafts of light through the window, and dust drifting in them.
+// Both test analytically whether a point sees the sun through the window panes.
+// ---------------------------------------------------------------------------
+const WIN_GLSL = /* glsl */`
+uniform vec3 uSunL, uBeamCol; uniform float uBeam, uTime, uPx; uniform mat4 uInvWorld;
+// window panes, in room coordinates: plan y 11..81, height 5..94, on the plane x = 139
+const vec4 WIN = vec4(11., 81., 5., 94.);
+float winMask(vec3 p) {
+  float t = (139. - p.x) / uSunL.x;
+  vec3 q = p + uSunL * t;
+  float y = -q.z, h = q.y;
+  float m = step(WIN.x, y) * step(y, WIN.y) * step(WIN.z, h) * step(h, WIN.w);
+  return m * step(.8, abs(y - 34.16)) * step(.8, abs(y - 68.2)) * step(.8, abs(h - 18.)) * step(.8, abs(h - 80.)) * step(0., t);
+}
+vec3 camRoom() { return (uInvWorld * vec4(cameraPosition, 1.)).xyz; }
+`;
+
+// Light shafts: rendered on the inside of the room's volume; each pixel works
+// out how much of its view ray passes through the sunlit prism behind the window.
+const beam = (() => {
+  const inset = [[0.5, 0.5], [138.5, 0.5], [138.5, 106.5], [26.5, 106.5], [26.5, 32.5], [0.5, 32.5]];
+  const geo = new THREE.ExtrudeGeometry(new THREE.Shape(inset.map(([x, y]) => new THREE.Vector2(x, y))),
+    { depth: CEIL - 1, bevelEnabled: false });
+  geo.rotateX(-Math.PI / 2).translate(0, 0.5, 0);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: RU, transparent: true, depthWrite: false, side: THREE.BackSide, blending: THREE.AdditiveBlending,
+    vertexShader: `varying vec3 vP; void main() { vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+    fragmentShader: WIN_GLSL + /* glsl */`
+      varying vec3 vP;
+      float tA, tB; vec2 q0, k;
+      // length of the ray inside window rectangle [lo, hi] (window-plane coords: plan y, height)
+      float span(vec2 lo, vec2 hi) {
+        vec2 a = (lo - q0) / k, b = (hi - q0) / k;
+        vec2 n = min(a, b), f = max(a, b);
+        return max(min(min(f.x, f.y), tB) - max(max(n.x, n.y), tA), 0.);
+      }
+      void main() {
+        vec3 o = camRoom(), rd = vP - o;
+        tB = length(rd); rd /= tB;
+        vec3 inv = 1. / rd;
+        vec3 t0 = (vec3(0., 0., -107.) - o) * inv, t1 = (vec3(139., 102., 0.) - o) * inv;
+        vec3 tn = min(t0, t1);
+        tA = max(max(max(tn.x, tn.y), tn.z), 0.);
+        // where each point of the ray lands on the window plane, following the sun: q0 + k t
+        float kx = 1. / uSunL.x;
+        q0 = vec2(-(o.z + uSunL.z * (139. - o.x) * kx), o.y + uSunL.y * (139. - o.x) * kx);
+        k = vec2(-(rd.z - uSunL.z * rd.x * kx), rd.y - uSunL.y * rd.x * kx);
+        k = sign(k + 1e-9) * max(abs(k), vec2(1e-6));
+        float L = .5 * (span(WIN.xz - 2.5, WIN.yw + 2.5) + span(WIN.xz + 2.5, WIN.yw - 2.5));
+        L -= span(vec2(33.36, WIN.z), vec2(34.96, WIN.w)) + span(vec2(67.4, WIN.z), vec2(69., WIN.w));
+        L -= span(vec2(WIN.x, 17.2), vec2(WIN.y, 18.8)) + span(vec2(WIN.x, 79.2), vec2(WIN.y, 80.8));
+        float phase = .2 + .8 * pow(max(dot(rd, uSunL), 0.), 8.);
+        float a = (1. - exp(-max(L, 0.) * .003)) * phase * uBeam;
+        gl_FragColor = vec4(uBeamCol * a, 1.);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = 5;
+  m.frustumCulled = false;
+  world.add(m);
+  return m;
+})();
+
+const dust = (() => {
+  const n = 900, pos = new Float32Array(n * 3), ph = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    let x, y;
+    do { x = 26 + rnd() * 113; y = rnd() * 107; } while (!inRoom([x, y]));
+    pos.set([x, 2 + rnd() * 96, -y], i * 3);
+    ph.set([rnd() * 6.28, rnd() * 6.28, rnd() * 6.28], i * 3);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aPh', new THREE.BufferAttribute(ph, 3));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: RU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: WIN_GLSL + /* glsl */`
+      attribute vec3 aPh; varying vec3 vCol;
+      void main() {
+        vec3 p = position + vec3(sin(uTime * .07 + aPh.x) * 6., sin(uTime * .05 + aPh.y) * 4., sin(uTime * .06 + aPh.z) * 6.);
+        float dist = length(p - camRoom());
+        float px = .12 * uPx / dist;
+        float tw = .5 + .5 * sin(uTime * 1.3 + aPh.x * 5.);
+        vCol = uBeamCol * winMask(p) * uBeam * (.3 + .7 * tw) * 1.6 * min(px / 1.5, 1.);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.);
+        gl_PointSize = max(px, 1.5);
+      }`,
+    fragmentShader: `varying vec3 vCol;
+      void main() { float a = smoothstep(.5, .1, length(gl_PointCoord - .5)); gl_FragColor = vec4(vCol * a, 1.);
+      #include <colorspace_fragment>
+      }`,
+  });
+  const p = new THREE.Points(geo, mat);
+  p.frustumCulled = false;
+  p.renderOrder = 6;
+  world.add(p);
+  return p;
+})();
+
+// ---------------------------------------------------------------------------
+// Environment lighting from the sky, rebuilt when the time of day changes.
+// ---------------------------------------------------------------------------
+const envScene = new THREE.Scene();
+{
+  const m = outdoorMat(`
+    varying vec3 vD; uniform mat3 uEnvRot;
+    void main() { vD = uEnvRot * position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`, `
+    varying vec3 vD;
+    void main() {
+      vec3 d = normalize(vD);
+      vec3 c = d.y < 0. ? mix(haze(d), uAmbGround, clamp(-d.y * 4., 0., 1.)) : sky(d, true);
+      gl_FragColor = vec4(min(c, vec3(4.)), 1.); ${OUT} }`, { side: THREE.BackSide });
+  m.uniforms = { ...U, uEnvRot: { value: new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationY(SUN_AZ)) } };
+  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), m));
+}
+let envRT = null, envDirty = true, envTimer = 0;
+function rebuildEnv() {
+  const rt = pmrem.fromScene(envScene, 0, 0.1, 100);
+  scene.environment = rt.texture;
+  envRT?.dispose();
+  envRT = rt;
+  envDirty = false;
+}
+
+// ---------------------------------------------------------------------------
+// Apply a time of day to the sky, city and room
+// ---------------------------------------------------------------------------
+const TOD_NAMES = [[0.22, 'Golden hour'], [0.62, 'Sunset'], [0.85, 'Twilight'], [2, 'Dusk']];
+const todName = (t) => TOD_NAMES.find(([v]) => t < v)[1];
+
+function setTod(t, { env = true } = {}) {
+  tod = Math.min(1, Math.max(0, t));
+  const elev = THREE.MathUtils.degToRad(12 - 17 * tod);
+  sunL.set(Math.cos(elev) * Math.cos(SUN_AZ), Math.sin(elev), Math.cos(elev) * Math.sin(SUN_AZ));
+  sunCity.set(Math.cos(elev), Math.sin(elev), 0);
+  const up = THREE.MathUtils.clamp((THREE.MathUtils.radToDeg(elev) + 1) / 4, 0, 1);
+
+  for (const k of ['zenith', 'horizon', 'antiHz', 'glow', 'sunCol', 'cloudLit', 'cloudDark', 'ambSky', 'ambGround'])
+    lerpCol(k, tod, U['u' + k[0].toUpperCase() + k.slice(1)].value);
+  U.uLitFrac.value = lerp3(NUMS.litFrac, tod);
+  U.uLitGain.value = lerp3(NUMS.litGain, tod);
+  U.uLights.value = lerp3(NUMS.lights, tod);
+  U.uFogDen.value = lerp3(NUMS.fogDen, tod);
+  U.uSunUp.value = up;
+
+  lerpCol('light', tod, sun.color);
+  sun.intensity = 4.2 * up;
+  sun.visible = up > 0;
+  sun.position.copy(sun.target.position).addScaledVector(sunL, 400);
+  lerpCol('light', tod, bounce.color);
+  bounce.userData.base = 900 * up;
+  lerpCol('hemiSky', tod, hemi.color);
+  lerpCol('hemiGround', tod, hemi.groundColor);
+  hemi.intensity = lerp3(NUMS.hemiI, tod);
+  scene.environmentIntensity = lerp3(NUMS.envI, tod);
+  lerpCol('light', tod, RU.uBeamCol.value);
+  RU.uBeam.value = up;
+
+  lerpCol('wash', tod, overlayU.uWash.value);
+  overlayU.uWashA.value = lerp3(NUMS.washA, tod);
+  lerpCol('light', tod, overlayU.uPatch.value);
+  overlayU.uPatchA.value = 0.5 * up;
+
+  applyWorldScaleToLights();
+  $('todLabel').textContent = todName(tod);
+  if (document.activeElement !== $('tod')) $('tod').value = tod;
+  if (env) { envDirty = true; envTimer = 0; }
+  drawXRPanel();
+}
+
+// ---------------------------------------------------------------------------
+// Bed (local frame: centre at origin, headboard toward local −z)
+// ---------------------------------------------------------------------------
+const bedGroup = new THREE.Group();
+{
+  const hw = BED_W / 2, hl = BED_L / 2;
+  const add = (m) => { bedGroup.add(m); return m; };
+  add(box(2, 40, 2, M.wood, -hw + 1, 20, -hl + 1));
+  add(box(2, 40, 2, M.wood, hw - 1, 20, -hl + 1));
+  add(box(BED_W - 4, 15, 1.5, M.wood, 0, 22.5, -hl + 1));
+  add(box(BED_W, 6, 2, M.wood, 0, 37, -hl + 1));
+  add(box(BED_W, 14, 1.5, M.wood, 0, 9, hl - 0.75));
+  add(box(1.5, 7, BED_L - 3.5, M.wood, -hw + 0.75, 11.5, 0.25));
+  add(box(1.5, 7, BED_L - 3.5, M.wood, hw - 0.75, 11.5, 0.25));
+  for (const [x, z] of [[-hw + 1.5, hl - 1.5], [hw - 1.5, hl - 1.5]]) add(box(3, 8, 3, M.wood, x, 4, z));
+  const mattress = add(new THREE.Mesh(new RoundedBoxGeometry(BED_W - 3.5, 10, BED_L - 5, 3, 2), M.linen));
+  mattress.position.set(0, 18, 0.5);
+  const duvet = add(new THREE.Mesh(new RoundedBoxGeometry(BED_W - 1, 9, 57, 4, 3.5), M.duvet));
+  duvet.position.set(0, 20.5, 11.5);
+  for (const x of [-14, 14]) {
+    const p = add(new THREE.Mesh(new RoundedBoxGeometry(26, 6, 16, 3, 2.9), M.duvet));
+    p.position.set(x, 25.5, -30); p.rotation.x = -0.2;
+  }
+  bedGroup.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+}
+world.add(bedGroup);
+
+// soft glow under the bed while it's being moved
+const footFill = new THREE.Mesh(new THREE.PlaneGeometry(BED_W + 4, BED_L + 4),
+  new THREE.MeshBasicMaterial({ color: '#ffb080', transparent: true, opacity: 0.22, depthWrite: false }));
+footFill.rotation.x = -Math.PI / 2; footFill.position.y = 0.3; footFill.visible = false;
+bedGroup.add(footFill);
+
+function refresh() {
+  bedGroup.position.copy(P(bed.x, bed.y));
+  bedGroup.rotation.y = bed.a;
+  footFill.material.color.set(isValid(bed) ? '#ffb080' : '#ef4444');
+}
+
+// ---------------------------------------------------------------------------
+// Moving / rotating the bed, stopping at the walls
+// ---------------------------------------------------------------------------
+function tidy(s) {
+  const r = { ...s, x: Math.round(s.x * 100) / 100, y: Math.round(s.y * 100) / 100 };
+  return isValid(r) ? r : s;
+}
+
+function slide(from, to) {
+  if (isValid(to)) return to;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 16; i++) {
+    const m = (lo + hi) / 2;
+    if (isValid({ ...to, x: from.x + (to.x - from.x) * m, y: from.y + (to.y - from.y) * m })) lo = m; else hi = m;
+  }
+  return tidy({ ...to, x: from.x + (to.x - from.x) * lo, y: from.y + (to.y - from.y) * lo });
+}
+
+function moveTo(x, y) {
+  const cur = { ...bed };
+  if (!isValid(cur)) { bed.x = x; bed.y = y; refresh(); return; }
+  const p1 = slide(cur, { ...cur, x });
+  const p2 = slide(p1, { ...p1, y });
+  bed.x = p2.x; bed.y = p2.y;
+  refresh();
+}
+
+function rotateTo(a, { search = true } = {}) {
+  const cand = { ...bed, a };
+  if (!isValid(bed) || isValid(cand)) { bed.a = a; refresh(); return true; }
+  if (search) {
+    for (let r = 0.5; r <= 36; r += 0.5) {
+      for (let k = 0; k < 24; k++) {
+        const t = k / 24 * Math.PI * 2;
+        const c = { x: bed.x + r * Math.cos(t), y: bed.y + r * Math.sin(t), a };
+        if (isValid(c)) { Object.assign(bed, c); refresh(); return true; }
+      }
+    }
+    toast('Not enough room to turn the bed here');
+  }
+  return false;
+}
+const rotateBy = (deg) => rotateTo(bed.a + deg * Math.PI / 180);
+
+let toastTimer, xrMsg = null;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  xrMsg = msg; drawXRPanel();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); xrMsg = null; drawXRPanel(); }, xr.on ? 3500 : 2200);
+}
+
+// ---------------------------------------------------------------------------
+// Desktop pointer interaction (registered before OrbitControls so we can claim drags)
+// ---------------------------------------------------------------------------
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+let drag = null;
+
+function setNDC(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+}
+function rayToPlan(ray) {
+  const v = new THREE.Vector3();
+  if (!ray.intersectPlane(floorPlane, v)) return null;
+  world.worldToLocal(v);
+  return [v.x, -v.z];
+}
+function floorPoint(e) { setNDC(e); return rayToPlan(raycaster.ray); }
+function hitsBed(e) {
+  setNDC(e);
+  return raycaster.intersectObject(bedGroup, true).some(h => h.object.isMesh && h.object !== footFill);
+}
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || !hitsBed(e)) return;
+  const p = floorPoint(e); if (!p) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  orbit.enabled = false;
+  renderer.domElement.setPointerCapture(e.pointerId);
+  drag = e.shiftKey
+    ? { mode: 'rotate', start: Math.atan2(p[1] - bed.y, p[0] - bed.x), a0: bed.a }
+    : { mode: 'move', off: [bed.x - p[0], bed.y - p[1]] };
+  footFill.visible = true;
+  renderer.domElement.style.cursor = 'grabbing';
+}, { capture: true });
+
+function dragRotate(p, d) {
+  let deg = (d.a0 + Math.atan2(p[1] - bed.y, p[0] - bed.x) - d.start) * 180 / Math.PI;
+  rotateTo(Math.round(deg / 5) * 5 * Math.PI / 180, { search: false });
+}
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (!drag) { renderer.domElement.style.cursor = hitsBed(e) ? 'grab' : ''; return; }
+  const p = floorPoint(e); if (!p) return;
+  if (drag.mode === 'move') moveTo(p[0] + drag.off[0], p[1] + drag.off[1]);
+  else dragRotate(p, drag);
+});
+
+function endDrag(e) {
+  if (!drag) return;
+  drag = null;
+  footFill.visible = false;
+  orbit.enabled = true;
+  renderer.domElement.style.cursor = '';
+  try { renderer.domElement.releasePointerCapture(e.pointerId); } catch {}
+}
+renderer.domElement.addEventListener('pointerup', endDrag);
+renderer.domElement.addEventListener('pointercancel', endDrag);
+
+const orbit = new OrbitControls(persp, renderer.domElement);
+orbit.enableDamping = true;
+
+// Viewpoints, as plan [x, y, height]. The first three are eye-level look-arounds;
+// the overview orbits the room from above.
+const VIEWS = {
+  viewWindow: { pos: [70, 42, 62], look: [139, 40, 58], fov: 70 },
+  viewBed:    { pos: [82, 88, 40], look: [139, 45, 50], fov: 70 },
+  viewDoor:   { pos: [12, 16, 64], look: [139, 60, 50], fov: 70 },
+  viewRoom:   { pos: [130, 22, 60], look: [30, 75, 38], fov: 70 },
+  viewOver:   { pos: [-60, -120, 260], look: [80, 53.5, 20], fov: 45, orbit: true },
+};
+let viewName = 'viewWindow';
+
+function setView(name) {
+  viewName = name;
+  const v = VIEWS[name];
+  const pos = P(...v.pos), look = P(...v.look);
+  persp.position.copy(pos);
+  persp.fov = v.fov; persp.updateProjectionMatrix();
+  if (v.orbit) {
+    orbit.target.copy(look);
+    Object.assign(orbit, { enableZoom: true, enablePan: true, rotateSpeed: 1, minDistance: 40, maxDistance: 1400,
+      minPolarAngle: 0, maxPolarAngle: Math.PI / 2 - 0.03 });
+  } else {
+    // look around from a fixed spot: orbit a target a hair in front of the eye
+    orbit.target.copy(pos).addScaledVector(look.sub(pos).normalize(), 1);
+    Object.assign(orbit, { enableZoom: false, enablePan: false, rotateSpeed: -0.35, minDistance: 0, maxDistance: Infinity,
+      minPolarAngle: 0.15, maxPolarAngle: Math.PI - 0.15 });
+  }
+  orbit.update();
+  for (const id of Object.keys(VIEWS)) $(id).classList.toggle('on', id === name);
+  updatePx();
+}
+for (const id of Object.keys(VIEWS)) $(id).onclick = () => setView(id);
+
+$('tod').addEventListener('input', (e) => setTod(+e.target.value));
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.closest('input')) return;
+  const step = e.shiftKey ? 6 : 1;
+  const k = e.key.toLowerCase();
+  const nudges = { arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, step], arrowdown: [0, -step] };
+  if (nudges[k]) { e.preventDefault(); moveTo(bed.x + nudges[k][0], bed.y + nudges[k][1]); }
+  else if (k === 'q') rotateBy(5);
+  else if (k === 'e') rotateBy(-5);
+  else if (k === 'r') rotateBy(90);
+  else if (k === '[') setTod(tod - 0.05);
+  else if (k === ']') setTod(tod + 0.05);
+});
+
+// ---------------------------------------------------------------------------
+// Sound: a soft city hum from 60 floors up, synthesised (no audio files)
+// ---------------------------------------------------------------------------
+const audio = { ctx: null, out: null, on: false };
+function setSound(on) {
+  if (on && !audio.ctx) {
+    const ctx = new AudioContext();
+    const len = ctx.sampleRate * 6, buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch); let last = 0;
+      for (let i = 0; i < len; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
+    }
+    const out = ctx.createGain(); out.gain.value = 0; out.connect(ctx.destination);
+    const layer = (freq, type, q, gain, lfoHz, depth) => {
+      const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+      src.playbackRate.value = 0.8 + Math.random() * 0.4;
+      const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+      const g = ctx.createGain(); g.gain.value = gain;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = lfoHz;
+      const lg = ctx.createGain(); lg.gain.value = depth;
+      lfo.connect(lg).connect(g.gain);
+      src.connect(f).connect(g).connect(out);
+      src.start(); lfo.start();
+    };
+    layer(160, 'lowpass', 0.7, 0.9, 0.05, 0.25);   // traffic rumble far below
+    layer(700, 'bandpass', 0.6, 0.25, 0.08, 0.2);  // wind on the glass
+    Object.assign(audio, { ctx, out });
+  }
+  audio.on = on;
+  if (audio.ctx) {
+    audio.ctx.resume();
+    audio.out.gain.setTargetAtTime(on ? 0.5 : 0, audio.ctx.currentTime, 0.6);
+  }
+  $('sound').textContent = on ? 'Sound on' : 'Sound off';
+  $('sound').classList.toggle('on', on);
+  drawXRPanel();
+}
+$('sound').onclick = () => setSound(!audio.on);
+
+// ---------------------------------------------------------------------------
+// WebXR (Quest). Passthrough keeps your real room and opens the window onto
+// Manhattan; "virtual room" swaps the whole room for the model.
+// ---------------------------------------------------------------------------
+const XR_SCALE = 0.0254; // inches → metres
+const ALIGN = [
+  { p: [139, 0], say: 'the floor corner where the mirror-closet wall meets the window wall' },
+  { p: [139, 107], say: 'the other end of the window wall, where it meets the headboard wall' },
+];
+const HELP = 'Trigger: drag the bed · Grip: turn it · Stick ←→ turn 15°, ↑↓ time of day · A/B/X/Y: bring this panel back';
+
+const xr = { on: false, mode: null, look: 'passthrough', drag: null, align: null, panelIn: 0, panelGrab: null, anchor: null, saveMsg: null };
+
+// Shared with ../bedroom-3d (same site, same room), so aligning in either app aligns both.
+const ANCHOR_KEY = 'bedroom-3d.alignAnchor';
+const savedAnchor = {
+  get() { try { return localStorage.getItem(ANCHOR_KEY); } catch { return null; } },
+  set(v) { try { v ? localStorage.setItem(ANCHOR_KEY, v) : localStorage.removeItem(ANCHOR_KEY); } catch {} },
+};
+const xrCam = new THREE.PerspectiveCamera(70, 1, 0.05, 20000);
+const SUN_BOX = { ...sun.shadow.camera };
+
+function applyWorldScaleToLights() {
+  const s = world.scale.x;
+  bounce.intensity = (bounce.userData.base ?? 0) * s * s; // inverse-square falloff is measured in world units
+}
+function setWorldScale(s) {
+  world.scale.setScalar(s);
+  const c = sun.shadow.camera;
+  for (const k of ['left', 'right', 'top', 'bottom', 'near', 'far']) c[k] = SUN_BOX[k] * s;
+  c.updateProjectionMatrix();
+  sun.shadow.normalBias = 0.4 * s;
+  applyWorldScaleToLights();
+}
+
+// Pose `world` so plan point a sits at real floor point ra and plan a→b points along ra→rb.
+function poseWorld(a, b, ra, rb) {
+  const la = P(...a).multiplyScalar(XR_SCALE), lb = P(...b).multiplyScalar(XR_SCALE);
+  const heading = (v) => Math.atan2(-v.z, v.x);
+  const th = heading(rb.clone().sub(ra)) - heading(lb.sub(la));
+  world.rotation.set(0, th, 0);
+  world.position.copy(ra).sub(la.applyAxisAngle(UP, th)).setY(0);
+}
+
+function applyLook() {
+  const pass = xr.on && xr.mode === 'immersive-ar' && (xr.look === 'passthrough' || !!xr.align);
+  for (const m of realMeshes) m.material = pass ? overlayMat : m.userData.mat;
+  for (const m of glassMeshes) m.visible = !pass;
+  for (const m of curtainMeshes) m.visible = !pass;
+  roomOutline.visible = !!xr.align;
+  drawXRPanel();
+}
+
+// --- floating panel ---------------------------------------------------------
+const PW = 1024, PH = 540;
+const pCanvas = document.createElement('canvas'); pCanvas.width = PW; pCanvas.height = PH;
+const pg = pCanvas.getContext('2d');
+const pTex = new THREE.CanvasTexture(pCanvas);
+pTex.colorSpace = THREE.SRGBColorSpace;
+const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5 * PH / PW),
+  new THREE.MeshBasicMaterial({ map: pTex, transparent: true, toneMapped: false }));
+panel.visible = false;
+panel.renderOrder = 10;
+scene.add(panel);
+
+const BTNS = [
+  ['⟲ 15°', () => rotateBy(15)], ['⟳ 15°', () => rotateBy(-15)],
+  ['Reset bed', () => { Object.assign(bed, DEFAULT_BED); refresh(); }], ['Align room', () => startAlign()],
+  ['◐ Earlier', () => setTod(tod - 0.1)], ['Later ◑', () => setTod(tod + 0.1)],
+  [() => xr.look === 'passthrough' ? 'Virtual room' : 'Passthrough', () => {
+    if (xr.mode !== 'immersive-ar') { toast('Passthrough needs mixed reality.'); return; }
+    xr.look = xr.look === 'passthrough' ? 'virtual' : 'passthrough'; applyLook();
+  }],
+  [() => audio.on ? 'Sound off' : 'Sound on', () => setSound(!audio.on)],
+  ['Hide panel', () => { panel.visible = false; }], ['Exit', () => renderer.xr.getSession()?.end()],
+].map(([label, run], i) => ({ label, run, x: 32 + (i % 4) * 244, y: 250 + Math.floor(i / 4) * 92, w: 228, h: 76 }));
+const hovered = new Set();
+
+function wrap(text, maxW) {
+  const lines = [''];
+  for (const w of text.split(' ')) {
+    const t = lines.at(-1) ? lines.at(-1) + ' ' + w : w;
+    if (pg.measureText(t).width > maxW && lines.at(-1)) lines.push(w); else lines[lines.length - 1] = t;
+  }
+  return lines;
+}
+
+function drawXRPanel() {
+  if (!xr.on) return;
+  const g = pg;
+  g.clearRect(0, 0, PW, PH);
+  g.fillStyle = 'rgba(22,14,28,.9)'; g.beginPath(); g.roundRect(0, 0, PW, PH, 36); g.fill();
+  g.fillStyle = xr.panelGrab ? '#ff9a5a' : 'rgba(255,255,255,.25)';
+  g.beginPath(); g.roundRect(PW / 2 - 70, 14, 140, 10, 5); g.fill();
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  g.fillStyle = '#f7ede6'; g.font = '700 40px system-ui, sans-serif';
+  g.fillText('Manhattan, 62nd floor', 36, 76);
+  g.textAlign = 'right'; g.font = '600 32px system-ui, sans-serif'; g.fillStyle = '#ffb27a';
+  g.fillText(todName(tod), PW - 36, 76);
+  // time-of-day track
+  const tx = 36, tw = PW - 72, ty = 104;
+  const grad = g.createLinearGradient(tx, 0, tx + tw, 0);
+  grad.addColorStop(0, '#ffc98a'); grad.addColorStop(0.5, '#ff7a45'); grad.addColorStop(1, '#2a2458');
+  g.fillStyle = grad; g.beginPath(); g.roundRect(tx, ty, tw, 10, 5); g.fill();
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(tx + tw * tod, ty + 5, 12, 0, Math.PI * 2); g.fill();
+
+  const msg = xr.align ? `Point at ${ALIGN[xr.align.step].say} and pull the trigger. (${xr.align.step + 1}/2)` : xrMsg || HELP;
+  g.textAlign = 'left'; g.font = '500 28px system-ui, sans-serif';
+  g.fillStyle = xr.align ? '#ffc98a' : xrMsg ? '#fbbf24' : '#b8aeb4';
+  wrap(msg, PW - 72).slice(0, 3).forEach((l, i) => g.fillText(l, 36, 162 + i * 34));
+
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '600 30px system-ui, sans-serif';
+  BTNS.forEach((b) => {
+    const label = typeof b.label === 'function' ? b.label() : b.label;
+    g.fillStyle = hovered.has(b) ? '#ff8a4a' : 'rgba(255,255,255,.12)';
+    g.beginPath(); g.roundRect(b.x, b.y, b.w, b.h, 14); g.fill();
+    g.fillStyle = '#fff'; g.fillText(label, b.x + b.w / 2, b.y + b.h / 2 + 2);
+  });
+  pTex.needsUpdate = true;
+}
+
+function buttonAt(uv) {
+  const x = uv.x * PW, y = (1 - uv.y) * PH;
+  return BTNS.find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) || null;
+}
+
+const headPos = () => new THREE.Vector3().setFromMatrixPosition(renderer.xr.getCamera().matrixWorld);
+
+function placePanel() {
+  const head = headPos();
+  const fwd = new THREE.Vector3(0, 0, -1).transformDirection(renderer.xr.getCamera().matrixWorld).setY(0);
+  if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1);
+  fwd.normalize();
+  panel.position.copy(head).addScaledVector(fwd, 0.65).setY(head.y - 0.25);
+  panel.lookAt(head);
+  panel.visible = true;
+  drawXRPanel();
+}
+
+function grabPanel(c) {
+  c.updateMatrixWorld();
+  xr.panelGrab = { c, offset: c.matrixWorld.clone().invert().multiply(panel.matrixWorld) };
+  drawXRPanel();
+}
+function movePanel() {
+  const { c, offset } = xr.panelGrab;
+  c.updateMatrixWorld();
+  panel.position.setFromMatrixPosition(c.matrixWorld.clone().multiply(offset));
+  panel.lookAt(headPos());
+}
+
+// --- alignment ----------------------------------------------------------------
+const reticle = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.045, 32).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: '#ff9a5a', depthTest: false }));
+reticle.renderOrder = 30; reticle.visible = false;
+const marker = new THREE.Mesh(new THREE.CircleGeometry(0.04, 32).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: '#ff9a5a', depthTest: false }));
+marker.renderOrder = 30; marker.visible = false;
+scene.add(reticle, marker);
+
+function startAlign() {
+  if (xr.mode !== 'immersive-ar') { toast('Aligning needs mixed reality, to see your real room.'); return; }
+  xr.align = { step: 0 };
+  applyLook();
+}
+
+function alignClick(point) {
+  if (xr.align.step === 0) {
+    xr.align = { step: 1, a: point.clone() };
+    marker.position.copy(point); marker.visible = true;
+    drawXRPanel();
+    return;
+  }
+  poseWorld(ALIGN[0].p, ALIGN[1].p, xr.align.a, point);
+  xr.align = null; marker.visible = false;
+  xr.anchor?.delete?.(); xr.anchor = null;
+  applyLook();
+  xr.saveMsg = 'Room aligned.'; // anchors can only be created inside a frame callback, so xrFrame() saves it
+}
+
+async function saveAlignment(frame, msg) {
+  const session = renderer.xr.getSession();
+  if (!frame.createAnchor) { toast(`${msg} This browser can't save it, so you'll need to align again next time.`); return; }
+  const old = savedAnchor.get();
+  if (old) { savedAnchor.set(null); await session.deletePersistentAnchor?.(old).catch(() => {}); }
+  const p = world.position, q = world.quaternion;
+  try {
+    const anchor = await frame.createAnchor(
+      new XRRigidTransform({ x: p.x, y: p.y, z: p.z }, { x: q.x, y: q.y, z: q.z, w: q.w }),
+      renderer.xr.getReferenceSpace());
+    if (xr.align || !xr.on) { anchor.delete(); return; }
+    xr.anchor = anchor;
+    savedAnchor.set(await anchor.requestPersistentHandle());
+    toast(`${msg} Saved for next time.`);
+  } catch (err) {
+    toast(`${msg} Couldn't save it (${err.message}), so you'll need to align again next time.`);
+  }
+}
+
+async function restoreAlignment(session) {
+  const uuid = savedAnchor.get();
+  if (!uuid || !session.restorePersistentAnchor) {
+    if (xr.mode === 'immersive-ar') toast('Tap Align room so the window lines up with your real one.');
+    return;
+  }
+  try {
+    xr.anchor = await session.restorePersistentAnchor(uuid);
+    toast('Restored your saved room alignment.');
+  } catch {
+    savedAnchor.set(null);
+    toast('Your saved alignment was lost. Use Align room to set it again.');
+  }
+}
+
+function followAnchor(frame) {
+  if (!xr.anchor || xr.align) return;
+  const pose = frame.getPose(xr.anchor.anchorSpace, renderer.xr.getReferenceSpace());
+  if (!pose) return;
+  const { position: p, orientation: o } = pose.transform;
+  world.position.set(p.x, p.y, p.z);
+  world.quaternion.set(o.x, o.y, o.z, o.w);
+}
+
+// --- controllers --------------------------------------------------------------
+const xrRay = new THREE.Raycaster();
+const rayGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]);
+
+function aim(c) {
+  xrRay.setFromXRController(c);
+  const res = { panel: null, bed: null, floor: null };
+  if (panel.visible) res.panel = xrRay.intersectObject(panel)[0] || null;
+  res.bed = xrRay.intersectObject(bedGroup, true).find(h => h.object.isMesh && h.object !== footFill) || null;
+  const f = new THREE.Vector3();
+  if (xrRay.ray.intersectPlane(floorPlane, f)) res.floor = f;
+  if (res.panel && res.bed && res.bed.distance < res.panel.distance) res.panel = null;
+  if (res.panel) res.bed = null;
+  return res;
+}
+
+function startDrag(c, mode) {
+  const p = rayToPlan(xrRay.ray);
+  if (!p) return;
+  xr.drag = mode === 'rotate'
+    ? { c, mode, start: Math.atan2(p[1] - bed.y, p[0] - bed.x), a0: bed.a }
+    : { c, mode, off: [bed.x - p[0], bed.y - p[1]] };
+}
+
+const controllers = [0, 1].map((i) => {
+  const c = renderer.xr.getController(i);
+  const ray = new THREE.Line(rayGeo, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6 }));
+  c.add(ray);
+  c.userData = { ray, src: null, stickLatch: false, btnPrev: false };
+  c.addEventListener('connected', (e) => { c.userData.src = e.data; });
+  c.addEventListener('disconnected', () => { c.userData.src = null; });
+  c.addEventListener('selectstart', () => {
+    const hit = aim(c);
+    if (xr.align) { if (hit.floor) alignClick(hit.floor); return; }
+    if (hit.panel) { const b = buttonAt(hit.panel.uv); if (b) b.run(); else grabPanel(c); return; }
+    if (hit.bed) startDrag(c, 'move');
+  });
+  c.addEventListener('squeezestart', () => {
+    const hit = aim(c);
+    if (hit.panel) grabPanel(c);
+    else if (!xr.align && hit.bed) startDrag(c, 'rotate');
+  });
+  const end = () => {
+    if (xr.drag?.c === c) xr.drag = null;
+    if (xr.panelGrab?.c === c) { xr.panelGrab = null; drawXRPanel(); }
+  };
+  c.addEventListener('selectend', end);
+  c.addEventListener('squeezeend', end);
+  scene.add(c);
+  return c;
+});
+
+let lastXRTime = 0;
+function xrFrame(time, frame) {
+  const dt = Math.min(0.1, (time - lastXRTime) / 1000 || 0);
+  lastXRTime = time;
+  if (xr.saveMsg) { saveAlignment(frame, xr.saveMsg); xr.saveMsg = null; }
+  followAnchor(frame);
+  if (xr.panelIn > 0 && --xr.panelIn === 0) placePanel();
+  if (xr.panelGrab) movePanel();
+  let bedHover = false, reticleAt = null, scrub = 0;
+  const prevHover = new Set(hovered);
+  hovered.clear();
+
+  for (const c of controllers) {
+    const { ray, src } = c.userData;
+    ray.visible = !!src;
+    if (!src) continue;
+    const hit = aim(c);
+    const d = hit.panel?.distance ?? hit.bed?.distance ?? (hit.floor ? hit.floor.distanceTo(xrRay.ray.origin) : 3);
+    ray.scale.z = Math.min(d, 5);
+    const btn = hit.panel && buttonAt(hit.panel.uv);
+    if (btn) hovered.add(btn);
+    if (hit.bed) bedHover = true;
+    ray.material.color.set(btn || hit.bed || xr.panelGrab?.c === c ? '#ff9a5a' : '#ffffff');
+    if (xr.align && hit.floor) reticleAt = hit.floor;
+
+    const gp = src.gamepad;
+    if (gp) {
+      const x = gp.axes[2] ?? 0, y = gp.axes[3] ?? 0;
+      if (!c.userData.stickLatch && Math.abs(x) > 0.75) { c.userData.stickLatch = true; rotateBy(x > 0 ? -15 : 15); }
+      else if (Math.abs(x) < 0.3) c.userData.stickLatch = false;
+      if (Math.abs(y) > 0.3 && Math.abs(y) > Math.abs(x)) scrub += -y;
+      const btnDown = [4, 5].some(k => gp.buttons[k]?.pressed);
+      if (btnDown && !c.userData.btnPrev) placePanel();
+      c.userData.btnPrev = btnDown;
+    }
+  }
+  if (scrub) setTod(tod + scrub * dt * 0.08);
+
+  if (xr.drag) {
+    xrRay.setFromXRController(xr.drag.c);
+    const p = rayToPlan(xrRay.ray);
+    if (p && xr.drag.mode === 'move') moveTo(p[0] + xr.drag.off[0], p[1] + xr.drag.off[1]);
+    else if (p) dragRotate(p, xr.drag);
+  }
+  footFill.visible = !!xr.drag || bedHover;
+
+  reticle.visible = !!reticleAt;
+  if (reticleAt) {
+    reticle.position.copy(reticleAt);
+    if (xr.align?.step === 1 && reticleAt.distanceTo(xr.align.a) > 0.3) poseWorld(ALIGN[0].p, ALIGN[1].p, xr.align.a, reticleAt);
+  }
+
+  if (hovered.size !== prevHover.size || [...hovered].some(b => !prevHover.has(b))) drawXRPanel();
+}
+
+function onXRStart(mode) {
+  Object.assign(xr, { on: true, mode, look: 'passthrough', drag: null, align: null, panelIn: 3, panelGrab: null, anchor: null, saveMsg: null });
+  setWorldScale(XR_SCALE);
+  // Until you align, assume you're standing just inside the entry door, facing into the room.
+  poseWorld([10, 16], [11, 16], new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1));
+  for (const o of ceilingItems) o.visible = true;
+  for (const { group } of wallGroups) group.visible = true;
+  U.uPx.value = 1100;
+  applyLook();
+  refresh();
+}
+
+function onXREnd() {
+  Object.assign(xr, { on: false, mode: null, drag: null, align: null, panelGrab: null, anchor: null, saveMsg: null });
+  setWorldScale(1);
+  world.position.set(0, 0, 0); world.rotation.set(0, 0, 0);
+  applyLook();
+  panel.visible = reticle.visible = marker.visible = footFill.visible = false;
+  resize();
+}
+
+(async () => {
+  if (!navigator.xr) return;
+  for (const [mode, label] of [['immersive-ar', 'Enter mixed reality'], ['immersive-vr', 'Enter VR']]) {
+    let ok = false;
+    try { ok = await navigator.xr.isSessionSupported(mode); } catch {}
+    if (!ok) continue;
+    const b = $('enterXR');
+    b.textContent = label; b.hidden = false;
+    b.onclick = async () => {
+      setSound(true); // needs this click to be allowed to start
+      try {
+        const session = await navigator.xr.requestSession(mode, {
+          requiredFeatures: ['local-floor'], optionalFeatures: ['hand-tracking', 'anchors'],
+        });
+        session.addEventListener('end', onXREnd);
+        await renderer.xr.setSession(session);
+        onXRStart(mode);
+        restoreAlignment(session);
+      } catch (err) { toast(`Couldn't start XR: ${err.message}`); }
+    };
+    return;
+  }
+})();
+
+// ---------------------------------------------------------------------------
+// Resize, wall cut-away, render loop
+// ---------------------------------------------------------------------------
+function updatePx() {
+  U.uPx.value = renderer.domElement.height / (2 * Math.tan(THREE.MathUtils.degToRad(persp.fov) / 2));
+}
+function resize() {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  renderer.setSize(w, h);
+  persp.aspect = w / h; persp.updateProjectionMatrix();
+  updatePx();
+}
+new ResizeObserver(() => { if (!renderer.xr.isPresenting) resize(); }).observe(viewport);
+resize();
+
+// In the overview, hide walls between the camera and the room.
+function updateWallVisibility() {
+  const cp = [camera.position.x, -camera.position.z];
+  const inside = camera.position.y < CEIL && inRoom(cp);
+  for (const { wall: w, group } of wallGroups) {
+    const d = (cp[0] - w.a[0]) * w.inN[0] + (cp[1] - w.a[1]) * w.inN[1];
+    group.visible = inside || d > -2;
+  }
+  for (const o of ceilingItems) o.visible = inside;
+}
+
+const clock = new THREE.Clock();
+const sunW = new THREE.Vector3();
+function perFrame() {
+  const dt = clock.getDelta();
+  U.uTime.value = clock.elapsedTime;
+  world.updateMatrixWorld();
+  U.uToCity.value.copy(city.matrixWorld).invert();
+  RU.uInvWorld.value.copy(world.matrixWorld).invert();
+  overlayU.uSunW.value.copy(sunW.copy(sunL).transformDirection(world.matrixWorld));
+  if (envDirty && (envTimer += dt) > 0.25) rebuildEnv();
+}
+
+setTod(tod);
+setView('viewWindow');
+refresh();
+rebuildEnv();
+renderer.setAnimationLoop((time, frame) => {
+  perFrame();
+  if (renderer.xr.isPresenting) {
+    xrFrame(time, frame);
+    renderer.render(scene, xrCam);
+    return;
+  }
+  orbit.update();
+  updateWallVisibility();
+  renderer.render(scene, camera);
+});
+window.__nyc = { bed, setTod, setView, moveTo, rotateTo, xr: { onXRStart, onXREnd, applyLook, pCanvas, xr }, scene, world, city }; // for debugging
+</script>
+</body>
+</html>
