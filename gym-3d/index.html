@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Gym Walkthrough</title>
+  <meta name="description" content="A walkable three.js / WebXR model of a small condo gym with a full mirror wall.">
+  <style>
+    :root { --bg: #0d0e11; --fg: #f1efe9; --muted: #a9a6a0; --accent: #f0b54a; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+      font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    canvas { display: block; touch-action: none; }
+    #overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
+      background: radial-gradient(ellipse at center, rgba(13,14,17,0.55), rgba(13,14,17,0.85)); z-index: 5; }
+    #overlay.hidden { display: none; }
+    .card { max-width: 440px; width: 100%; background: rgba(22,23,27,0.92); border: 1px solid #2c2d33;
+      border-radius: 14px; padding: 22px 22px 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+    h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: 0.02em; }
+    p { margin: 0 0 14px; color: var(--muted); }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    h2 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); }
+    ul { margin: 0; padding: 0; list-style: none; font-size: 13.5px; }
+    li { margin: 2px 0; }
+    kbd { font: 12px ui-monospace, monospace; background: #2a2b31; border-radius: 4px; padding: 1px 5px; }
+    #start { width: 100%; padding: 11px; font: inherit; font-weight: 600; color: #111; background: var(--accent);
+      border: 0; border-radius: 9px; cursor: pointer; }
+    #hint { position: fixed; left: 16px; top: 12px; font-size: 12px; color: var(--muted); z-index: 4;
+      text-shadow: 0 1px 2px #000; pointer-events: none; }
+    @media (max-width: 460px) { .cols { grid-template-columns: 1fr; } }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="overlay">
+    <div class="card">
+      <h1>Gym walkthrough</h1>
+      <p>A 1:1 model of the building gym. The long wall facing the treadmills is a mirror. Press <b>Enter VR</b> at the bottom on a Quest to walk around in it.</p>
+      <div class="cols">
+        <div>
+          <h2>VR</h2>
+          <ul>
+            <li>Left stick: walk</li>
+            <li>Left stick click: sprint</li>
+            <li>Right stick: snap turn</li>
+            <li>Right stick click: smooth turn</li>
+            <li>A / X: jump</li>
+            <li>B / Y: respawn</li>
+          </ul>
+        </div>
+        <div>
+          <h2>Desktop</h2>
+          <ul>
+            <li>Mouse: look</li>
+            <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>: walk</li>
+            <li><kbd>Shift</kbd>: run</li>
+            <li><kbd>Space</kbd>: jump</li>
+            <li><kbd>R</kbd>: respawn</li>
+            <li>Touch: left side moves, right side looks</li>
+          </ul>
+        </div>
+      </div>
+      <button id="start">Walk around</button>
+    </div>
+  </div>
+  <div id="hint">Esc frees the mouse · R respawns</div>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
