@@ -13,6 +13,8 @@
   function n(x) { return Math.round(x).toLocaleString('en-CA'); }
   function td(v, cls) { return '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td>'; }
   function th(v, cls) { return '<th' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</th>'; }
+  function CR() { return '<sup class="cite">[' + Array.prototype.map.call(arguments, function (n) { return '<a href="#r' + n + '">' + n + '</a>'; }).join(',') + ']</sup>'; }
+  function CD(d, pg) { var L = { rr: 'RR', ox: 'OX', ap: 'AP', fg: 'FG' }; return '<sup class="cite">[<a href="#d-' + d + '">' + L[d] + (pg ? ' p.' + pg : '') + '</a>]</sup>'; }
   function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
   function el(tag, attrs, parent) { var e = document.createElementNS(SVGNS, tag); for (var a in attrs) e.setAttribute(a, attrs[a]); if (parent) parent.appendChild(e); return e; }
   function txt(parent, x, y, s, attrs) { var t = el('text', Object.assign({ x: x, y: y }, attrs || {}), parent); t.textContent = s; return t; }
@@ -222,7 +224,7 @@
     var by = {};
     M.UNITS.filter(function (u) { return u.status === 'leased'; }).forEach(function (u) { (by[u.end] = by[u.end] || []).push(u); });
     var h = '<thead><tr>' + th('Expiry') + th('Units') + th('Billed sf', 'r') + th('Gross rent / yr', 'r') + th('% of in-place gross', 'r') + th('Note') + '</tr></thead><tbody>';
-    var notes = { 2026: 'Pharmacy: 2026 is now, so confirm renewal (option on file).', 2027: 'School at $30.39 gross vs ~$22 market: expect a roll-down.', 2030: 'Four main-floor renewals and two basement leases, all signed 2025.' };
+    var notes = { 2026: 'Pharmacy: 2026 is now, so confirm renewal (option on file' + CD('rr') + ').', 2027: 'School at $30.39 gross vs ~$22 market: expect a roll-down.', 2030: 'Four main-floor renewals and two basement leases, all signed 2025.' };
     h += '<tr>' + td('No lease (month-to-month)') + td('B101, B103, B111') + td(n(789 + 706 + 638), 'r') + td(money(ip.informalRent), 'r') + td(pct(ip.informalRent / ip.gross), 'r') + td('Cash. Can leave, or be removed, on short notice.') + '</tr>';
     Object.keys(by).sort().forEach(function (y) {
       var g = by[y].reduce(function (s, u) { return s + u.base + u.addl; }, 0), sf = by[y].reduce(function (s, u) { return s + u.billed; }, 0);
@@ -231,12 +233,13 @@
     $('expiryTable').innerHTML = h + '</tbody>';
   }
   function sales() {
-    var h = '<thead><tr>' + th('Property') + th('Area') + th('Date') + th('Price', 'r') + th('Size sf', 'r') + th('$/sf', 'r') + th('Cap', 'r') + th('Implied NOI $/sf', 'r') + th('Notes') + '</tr></thead><tbody>';
-    M.SALES.forEach(function (s) {
-      h += '<tr>' + td(s.addr) + td(s.city) + td(s.date) + td(money(s.price), 'r') + td(n(s.sf), 'r') + td(money(s.price / s.sf), 'r') + td(s.cap ? pct(s.cap, 2) : '–', 'r') + td(s.cap ? money(s.price / s.sf * s.cap, 2) : '–', 'r') + td('<span class="small">' + s.note + '</span>') + '</tr>';
+    var h = '<thead><tr>' + th('Property') + th('Area') + th('Date') + th('Price', 'r') + th('Size sf', 'r') + th('$/sf', 'r') + th('Cap', 'r') + th('Implied NOI $/sf', 'r') + th('Notes') + th('Source') + '</tr></thead><tbody>';
+    var SRC = [CD('ap', 52) + CD('ap', 58), CD('ap', 52) + CD('ap', 58), CD('ap', 52) + CD('ap', 59), CD('ap', 52) + CD('ap', 58), CR(8, 9)];
+    M.SALES.forEach(function (s, si) {
+      h += '<tr>' + td(s.addr) + td(s.city) + td(s.date) + td(money(s.price), 'r') + td(n(s.sf), 'r') + td(money(s.price / s.sf), 'r') + td(s.cap ? pct(s.cap, 2) : '–', 'r') + td(s.cap ? money(s.price / s.sf * s.cap, 2) : '–', 'r') + td('<span class="small">' + s.note + '</span>') + td(SRC[si]) + '</tr>';
     });
     var st = R.base.asIs.stabilized;
-    h += '<tr class="total">' + td('Subject at asking price') + td('Rexdale') + td('Sept 2026 ask') + td(money(M.BUILDING.ask), 'r') + td(n(M.BUILDING.gfa), 'r') + td(money(M.BUILDING.ask / M.BUILDING.gfa), 'r') + td(pct(ip.noi / M.BUILDING.ask, 2) + '*', 'r') + td(money(st.noi / M.BUILDING.gfa, 2) + '†', 'r') + td('<span class="small">*on normalized in-place NOI · †stabilized NOI per sf GFA</span>') + '</tr>';
+    h += '<tr class="total">' + td('Subject at asking price') + td('Rexdale') + td('Sept 2026 ask') + td(money(M.BUILDING.ask), 'r') + td(n(M.BUILDING.gfa), 'r') + td(money(M.BUILDING.ask / M.BUILDING.gfa), 'r') + td(pct(ip.noi / M.BUILDING.ask, 2) + '*', 'r') + td(money(st.noi / M.BUILDING.gfa, 2) + '†', 'r') + td('<span class="small">*on normalized in-place NOI · †stabilized NOI per sf GFA</span>') + td(CR(1) + CD('rr')) + '</tr>';
     $('salesTable').innerHTML = h + '</tbody>';
   }
   function stab() {
@@ -299,7 +302,7 @@
   function dcaT() {
     var B = M.BUILDING, lu = M.leaseUp().total;
     var h = '<thead><tr>' + th('Level') + th('GFA sf', 'r') + th('Low $/sf', 'r') + th('Base $/sf', 'r') + th('High $/sf', 'r') + th('Basis') + '</tr></thead><tbody>';
-    var basis = ['Fully leased mixed-use comps at $341–440/sf (urban, better locations); 964-1010 Albion at $568 includes redevelopment land', 'Suburban Class B/C office: income-supported value at $22 gross and 8.5% is about $98/sf', 'Below-grade space typically trades at 15–25% of the main-floor rate'];
+    var basis = ['Fully leased mixed-use comps at $341–440/sf (urban, better locations)' + CD('ap', 58) + '; 964-1010 Albion at $568 includes redevelopment land' + CR(8, 9), 'Suburban Class B/C office: income-supported value at $22 gross and 8.5% is about $98/sf (my judgment, see 5a)', 'Below-grade space at about 15–25% of the main-floor rate (my judgment)'];
     [['Main floor', B.gfaMain], ['Second floor', B.gfaSecond], ['Basement', B.gfaBasement]].forEach(function (l, i) {
       h += '<tr>' + td(l[0]) + td(n(l[1]), 'r') + td(money(DCA.low[i]), 'r') + td(money(DCA.base[i]), 'r') + td(money(DCA.high[i]), 'r') + td('<span class="small">' + basis[i] + '</span>') + '</tr>';
     });

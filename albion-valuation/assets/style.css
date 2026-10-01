@@ -154,3 +154,11 @@ footer { max-width: 1120px; margin: 0 auto; padding: 24px 16px 60px; color: var(
 /* wide tables scroll horizontally on small screens instead of squeezing */
 #rrTable, #salesTable, #contractTable, #offerTable, #expiryTable, #dcaTable, #scenarioTable, table.wide { min-width: 760px; }
 #dcfTable, #stabTable { min-width: 820px; }
+
+/* citations */
+sup.cite { font-size: 10.5px; line-height: 0; margin-left: 1px; white-space: nowrap; color: var(--muted); font-weight: 500; }
+sup.cite a { text-decoration: none; }
+sup.cite a:hover { text-decoration: underline; }
+ol.refs { list-style: none; padding: 0; font-size: 13px; }
+ol.refs li { padding: 8px 10px; border-bottom: 1px solid var(--grid); border-radius: 6px; scroll-margin-top: 80px; }
+ol.refs li:target { background: var(--warn-bg); }
