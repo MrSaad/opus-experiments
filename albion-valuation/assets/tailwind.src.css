@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Solarized tokens. Light is the default; .dark on <html> switches to Solarized dark.
+   Text steps are nudged from the canonical palette where needed to meet WCAG AA. */
+:root {
+  color-scheme: light;
+  --page: #fdf6e3;      /* base3 */
+  --surface: #fffbf0;   /* base3, lifted for cards */
+  --surface-2: #eee8d5; /* base2 */
+  --ink: #073642;       /* base02 */
+  --ink-2: #2e4c55;
+  --muted: #586e75;     /* base01 */
+  --border: #e4dcc4;
+  --grid: #eee8d5;
+  --axis: #c9c1a9;
+  --accent: #268bd2;    /* blue */
+  --link: #1a6496;
+  --good: #5f7000;
+  --bad: #c22a27;
+  --warn-bg: #f6e9c4;
+  --warn-ink: #7a5c00;
+  /* chart marks */
+  --s1: #268bd2; --s2: #cb4b16; --s3: #2aa198; --neutral: #93a1a1; --down: #dc322f; --up: #268bd2;
+  --h1: #d6e3e0; --h2: #b0cfdd; --h3: #85bad9; --h4: #55a3d6; --h5: #268bd2; --h6: #1b6da0;
+}
+.dark {
+  color-scheme: dark;
+  --page: #002b36;      /* base03 */
+  --surface: #073642;   /* base02 */
+  --surface-2: #0b3f4c;
+  --ink: #eee8d5;       /* base2 */
+  --ink-2: #b3bdbb;
+  --muted: #93a1a1;     /* base1 */
+  --border: #124654;
+  --grid: #0f4250;
+  --axis: #2a5a66;
+  --accent: #268bd2;
+  --link: #5fadeb;
+  --good: #a5bd00;
+  --bad: #f37370;
+  --warn-bg: #12404a;
+  --warn-ink: #e0b84a;
+  --s1: #268bd2; --s2: #cb4b16; --s3: #2aa198; --neutral: #586e75; --down: #dc322f; --up: #268bd2;
+  --h1: #0d475f; --h2: #135679; --h3: #186693; --h4: #1e75ad; --h5: #2382c4; --h6: #62a7d3;
+}
+
+@layer base {
+  html { @apply scroll-smooth; scroll-padding-top: 56px; -webkit-text-size-adjust: 100%; }
+  body { @apply bg-page text-ink2 font-sans text-[15px] leading-relaxed antialiased; }
+  a { @apply text-link underline-offset-2 hover:underline; }
+  h1, h2, h3, h4 { @apply text-ink font-semibold leading-tight; text-wrap: balance; }
+  h1 { @apply text-[28px] sm:text-[40px] tracking-tight mb-3; }
+  h2 { @apply text-[22px] sm:text-[27px] tracking-tight mb-3; }
+  h3 { @apply text-[17px] mt-6 mb-2; }
+  h4 { @apply text-[15px] mb-1; }
+  p { @apply mb-3; text-wrap: pretty; }
+  b, strong { @apply font-semibold text-ink; }
+  ul { @apply list-disc pl-5 mb-3 space-y-1.5; }
+  ol { @apply list-decimal pl-5 mb-3 space-y-1.5; }
+  section { @apply border-t border-line pt-10 pb-2 sm:pt-12; }
+  table { @apply w-full border-collapse text-[13px] sm:text-[13.5px]; }
+  th { @apply bg-surface2 text-ink2 font-semibold text-[12px] whitespace-nowrap text-left px-2.5 py-1.5 align-top; }
+  td { @apply border-b border-grid px-2.5 py-1.5 text-left align-top; }
+  td.r, th.r { @apply text-right whitespace-nowrap tabular-nums; }
+  tbody tr:last-child td { @apply border-b-0; }
+  tr.total td { @apply font-semibold text-ink border-t-2 border-t-[color:var(--axis)]; }
+  tr.group td { @apply bg-surface2 font-semibold text-[12px]; }
+  details summary { @apply cursor-pointer font-semibold text-ink; }
+}
+
+@layer components {
+  .card { @apply bg-surface border border-line rounded-xl p-4 sm:p-5 min-w-0; }
+  .tbl { @apply overflow-x-auto bg-surface border border-line rounded-xl my-3; -webkit-overflow-scrolling: touch; }
+  .wide { @apply min-w-[760px]; }
+  .tile .label { @apply text-[13px] text-ink2; }
+  .tile .value { @apply text-[26px] sm:text-[30px] font-bold text-ink leading-tight my-1 tabular-nums; }
+  .tile .sub { @apply text-[13px] text-muted; }
+  .eyebrow { @apply uppercase tracking-wider text-[12px] font-semibold text-muted mb-2; }
+  .lede { @apply text-[16px] sm:text-[17px] text-ink2 max-w-3xl; }
+  .callout { @apply bg-warnbg text-ink rounded-xl px-4 py-3.5 my-4; }
+  .callout h4 { @apply text-warnink; }
+  .chip { @apply text-[13px] px-3 py-1 rounded-full border border-line bg-surface text-ink2 cursor-pointer; }
+  .chip[aria-pressed="true"] { @apply bg-ink text-page border-ink; }
+  .tag { @apply inline-block text-[11px] px-2 rounded-full border border-line text-ink2 whitespace-nowrap align-middle; }
+  .dot { @apply inline-block w-2.5 h-2.5 rounded-sm mr-1.5 align-[-1px]; }
+  .legend { @apply flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink2 my-1.5; }
+  .neg { @apply text-bad; }
+  sup.cite { @apply text-[10.5px] leading-none ml-px whitespace-nowrap text-muted font-medium normal-case tracking-normal; }
+  sup.cite a { @apply no-underline hover:underline; }
+  .refs { @apply list-none p-0 text-[13px] space-y-0; }
+  .refs li { @apply px-2.5 py-2 border-b border-grid rounded-md; scroll-margin-top: 72px; }
+  .refs li:target { @apply bg-warnbg; }
+  .check { @apply list-none p-0 space-y-0; }
+  .check li { @apply relative py-2 pl-7 border-b border-grid; }
+  .check li::before { content: "☐"; @apply absolute left-1 top-1.5 text-muted; }
+  .sev { @apply text-[10.5px] font-bold uppercase tracking-wide px-1.5 py-px rounded mr-1.5; }
+  .sev.hi { @apply text-bad bg-[color:var(--warn-bg)]; }
+  .sev.md { @apply text-warnink bg-warnbg; }
+  .sev.lo { @apply text-ink2 bg-surface2; }
+  .tip { @apply fixed hidden pointer-events-none z-50 bg-surface text-ink border border-line rounded-lg px-2.5 py-2 text-[12.5px] shadow-lg max-w-[280px]; }
+  .tip b { @apply block mb-0.5; }
+  .ctl { @apply grid grid-cols-[1fr_auto] gap-x-2.5 gap-y-0.5 items-center py-2 border-b border-grid; }
+  .ctl label { @apply text-[13.5px]; }
+  .ctl output { @apply tabular-nums font-semibold text-[13.5px] text-ink; }
+  .ctl input[type=range] { @apply col-span-2 w-full h-7; accent-color: var(--accent); }
+  .ctl .hint { @apply col-span-2 text-[12px] text-muted; }
+  .btn { @apply text-[13px] px-3 py-1.5 rounded-lg border border-line bg-surface text-ink cursor-pointer; }
+  .btn.primary { @apply bg-accent text-white border-accent; }
+  .hero-num { @apply text-[44px] sm:text-[56px] font-bold text-ink leading-none tracking-tight tabular-nums; }
+  .navlink { @apply text-ink2 no-underline text-[13.5px] whitespace-nowrap hover:text-ink hover:no-underline py-1; }
+}
+
+/* SVG chart text and lines (inline SVG can't take utilities from generated markup cleanly) */
+.chart { display: block; width: 100%; }
+.chart text { fill: var(--ink-2); font: 12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.chart .lbl-strong { fill: var(--ink); font-weight: 600; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .axis { stroke: var(--axis); stroke-width: 1; }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

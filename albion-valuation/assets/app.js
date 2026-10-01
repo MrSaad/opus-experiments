@@ -14,7 +14,8 @@
   function td(v, cls) { return '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td>'; }
   function th(v, cls) { return '<th' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</th>'; }
   function CR() { return '<sup class="cite">[' + Array.prototype.map.call(arguments, function (n) { return '<a href="#r' + n + '">' + n + '</a>'; }).join(',') + ']</sup>'; }
-  function CD(d, pg) { var L = { rr: 'RR', ox: 'OX', ap: 'AP', fg: 'FG' }; return '<sup class="cite">[<a href="#d-' + d + '">' + L[d] + (pg ? ' p.' + pg : '') + '</a>]</sup>'; }
+  var DOCS = { rr: ['RR', 'docs/rent-roll.pdf', 'Rent roll'], ox: ['OX', 'docs/operating-expenses-2025.pdf', '2025 operating expenses'], ap: ['AP', 'docs/draft-appraisal-valsum-2025.pdf', 'Draft appraisal'], fg: ['FG', 'docs/first-glance-evaluation.pdf', 'First-glance evaluation'] };
+  function CD(d, pg) { var x = DOCS[d]; return '<sup class="cite">[<a href="' + x[1] + (pg ? '#page=' + pg : '') + '" target="_blank" rel="noopener" title="' + x[2] + (pg ? ', page ' + pg : '') + ' (PDF)">' + x[0] + (pg ? ' p.' + pg : '') + '</a>]</sup>'; }
   function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
   function el(tag, attrs, parent) { var e = document.createElementNS(SVGNS, tag); for (var a in attrs) e.setAttribute(a, attrs[a]); if (parent) parent.appendChild(e); return e; }
   function txt(parent, x, y, s, attrs) { var t = el('text', Object.assign({ x: x, y: y }, attrs || {}), parent); t.textContent = s; return t; }
@@ -42,14 +43,19 @@
   var reconciled = W.dc * R.base.asIs.value + W.dcf * R.base.dcf.pv + W.dca * dca.base;
 
   // ---------- theme ----------
+  function syncThemeUi() {
+    var dark = document.documentElement.classList.contains('dark');
+    var b = $('themeBtn'); b.setAttribute('aria-pressed', dark ? 'true' : 'false'); b.setAttribute('aria-label', dark ? 'Switch to Solarized light' : 'Switch to Solarized dark');
+    $('themeLabel').textContent = dark ? 'Light' : 'Dark';
+    var m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', dark ? '#002b36' : '#fdf6e3');
+  }
+  syncThemeUi();
   $('themeBtn').addEventListener('click', function () {
-    var root = document.documentElement, cur = root.getAttribute('data-theme');
-    var dark = cur ? cur === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-    root.setAttribute('data-theme', dark ? 'light' : 'dark');
-    try { localStorage.setItem('albion-theme', root.getAttribute('data-theme')); } catch (e) {}
+    var dark = document.documentElement.classList.toggle('dark');
+    try { localStorage.setItem('albion-theme', dark ? 'dark' : 'light'); } catch (e) {}
+    syncThemeUi();
     drawCharts();
   });
-  try { var saved = localStorage.getItem('albion-theme'); if (saved) document.documentElement.setAttribute('data-theme', saved); } catch (e) {}
 
   // ================= CHARTS =================
   function football() {
@@ -67,28 +73,30 @@
       { v: 6999000, label: 'Asking $7.0M' },
       { v: 9330000, label: 'Draft appraisal $9.33M' }
     ];
-    var w = Math.max(320, host.clientWidth), narrow = w < 560;
-    var padL = narrow ? 118 : 170, padR = 16, rowH = 38, top = 54, h = top + rows.length * rowH + 30;
+    var w = Math.max(300, host.clientWidth), narrow = w < 560;
+    // On phones, row labels sit above each bar so the plot can use the full width.
+    var padL = narrow ? 8 : 170, padR = narrow ? 12 : 16, rowH = narrow ? 50 : 38, top = 54, h = top + rows.length * rowH + 30;
     var x0 = 2000000, x1 = 10000000, sx = function (v) { return padL + (v - x0) / (x1 - x0) * (w - padL - padR); };
     var svg = el('svg', { class: 'chart', viewBox: '0 0 ' + w + ' ' + h, width: w, height: h, role: 'img', 'aria-label': 'Valuation range by method compared with asking price and appraisal' }, host);
-    for (var t = 2; t <= 10; t++) { var gx = sx(t * 1e6); el('line', { x1: gx, x2: gx, y1: top - 6, y2: h - 26, class: 'gridline' }, svg); txt(svg, gx, h - 10, '$' + t + 'M', { 'text-anchor': 'middle' }); }
+    for (var t = 2; t <= 10; t += narrow ? 2 : 1) { var gx = sx(t * 1e6); el('line', { x1: gx, x2: gx, y1: top - 6, y2: h - 26, class: 'gridline' }, svg); txt(svg, gx, h - 10, '$' + t + 'M', { 'text-anchor': narrow && t === 10 ? 'end' : narrow && t === 2 ? 'start' : 'middle' }); }
     refs.forEach(function (r, i) {
       var x = sx(r.v);
-      el('line', { x1: x, x2: x, y1: top - 8, y2: h - 26, stroke: css('--ink-2'), 'stroke-width': 1, 'stroke-dasharray': '0' , opacity: 0.55 }, svg);
+      el('line', { x1: x, x2: x, y1: top - 8, y2: h - 26, stroke: css('--ink-2'), 'stroke-width': 1, opacity: 0.55 }, svg);
       var ty = i % 2 === 0 ? 14 : 32;
       var anchor = r.v > 8.5e6 ? 'end' : (r.v < 3e6 ? 'start' : 'middle');
-      var lbl = narrow ? r.label.replace(/ \(2016 values\)/, '').replace('Draft appraisal', 'Appraisal').replace('2011 purchase', '2011') : r.label;
+      var lbl = narrow ? ['2011 buy $2.48M', 'MPAC $4.39M', 'Ask $7.0M', 'Appraisal $9.33M'][i] : r.label;
       txt(svg, x + (anchor === 'end' ? 4 : 0), ty, lbl, { 'text-anchor': anchor, class: 'lbl-strong', style: 'font-size:11.5px' });
     });
     rows.forEach(function (r, i) {
-      var y = top + i * rowH + rowH / 2;
-      txt(svg, padL - 10, y + 4, r.label, { 'text-anchor': 'end', class: r.strong ? 'lbl-strong' : '' });
+      var y = top + i * rowH + rowH / 2 + (narrow ? 7 : 0);
+      if (narrow) txt(svg, padL, y - 15, r.label, { class: r.strong ? 'lbl-strong' : '' });
+      else txt(svg, padL - 10, y + 4, r.label, { 'text-anchor': 'end', class: r.strong ? 'lbl-strong' : '' });
       var g = el('g', {}, svg);
-      var bar = el('rect', { x: sx(r.lo), y: y - 9, width: Math.max(4, sx(r.hi) - sx(r.lo)), height: 18, rx: 4, fill: r.strong ? css('--s1') : css('--h2') }, g);
+      el('rect', { x: sx(r.lo), y: y - 8, width: Math.max(4, sx(r.hi) - sx(r.lo)), height: 16, rx: 4, fill: r.strong ? css('--s1') : css('--h2') }, g);
       el('circle', { cx: sx(r.mid), cy: y, r: 6, fill: r.strong ? css('--h6') : css('--s1'), stroke: css('--surface'), 'stroke-width': 2 }, g);
       txt(g, sx(r.hi) + 8, y + 4, mm(r.mid, 2), { class: r.strong ? 'lbl-strong' : '' });
-      el('rect', { x: padL, y: y - rowH / 2, width: w - padL - padR, height: rowH, fill: 'transparent' }, g);
-      hover(g, '<b>' + r.label + '</b>Base ' + mm(r.mid) + ' · range ' + mm(r.lo) + '–' + mm(r.hi) + '<br><span class="muted">' + r.note + '</span>');
+      el('rect', { x: padL, y: y - rowH / 2 - (narrow ? 7 : 0), width: w - padL - padR, height: rowH, fill: 'transparent' }, g);
+      hover(g, '<b>' + r.label + '</b>Base ' + mm(r.mid) + ' · range ' + mm(r.lo) + '–' + mm(r.hi) + '<br><span class="text-muted">' + r.note + '</span>');
     });
   }
 
@@ -124,7 +132,7 @@
     var padL = narrow ? 10 : 250, padR = 70, rowH = narrow ? 52 : 34, h = steps.length * rowH + 30;
     var max = 9500000, sx = function (v) { return padL + v / max * (w - padL - padR); };
     var svg = el('svg', { class: 'chart', viewBox: '0 0 ' + w + ' ' + h, width: w, height: h, role: 'img', 'aria-label': 'Bridge from appraisal value to concluded value' }, host);
-    for (var t = 0; t <= 9; t += 1) { var gx = sx(t * 1e6); el('line', { x1: gx, x2: gx, y1: 0, y2: h - 22, class: 'gridline' }, svg); if (!narrow || t % 3 === 0) txt(svg, gx, h - 6, '$' + t + 'M', { 'text-anchor': 'middle' }); }
+    for (var t = 0; t <= 9; t += 1) { var gx = sx(t * 1e6); el('line', { x1: gx, x2: gx, y1: 0, y2: h - 22, class: 'gridline' }, svg); if (!narrow || t % 3 === 0) txt(svg, gx, h - 6, '$' + t + 'M', { 'text-anchor': narrow && t === 0 ? 'start' : 'middle' }); }
     var prev = null;
     steps.forEach(function (s, i) {
       var y = i * rowH + (narrow ? 22 : 6), bh = 20;
@@ -180,9 +188,9 @@
     rows.forEach(function (u) {
       var g = u.base + u.addl; tot.sf += u.sf; tot.base += u.base; tot.addl += u.addl;
       var area = u.status === 'leased' ? u.billed : u.sf;
-      h += '<tr>' + td('<b>' + u.id + '</b>') + td(u.tenant + (u.note ? ' <span class="muted small">· ' + u.note + '</span>' : '')) + td(u.use || '') + td('<span class="tag">' + st[u.status] + '</span>') +
+      h += '<tr>' + td('<b>' + u.id + '</b>') + td(u.tenant + (u.note ? ' <span class="text-muted text-[12px]">· ' + u.note + '</span>' : '')) + td(u.use || '') + td('<span class="tag">' + st[u.status] + '</span>') +
         td(n(u.sf), 'r') + td(u.status === 'leased' ? n(u.billed) : '–', 'r') + td(u.status === 'leased' ? money(u.base / u.billed, 2) : '–', 'r') + td(u.base ? money(u.base) : '–', 'r') + td(u.addl ? money(u.addl) : '–', 'r') + td(g ? money(g) : '–', 'r') + td(g ? money(g / area, 2) : '–', 'r') +
-        td(u.status === 'leased' ? u.start + '–' + u.end + (u.since && u.since < u.start ? ' <span class="muted small">(since ' + u.since + ')</span>' : '') : '') + '</tr>';
+        td(u.status === 'leased' ? u.start + '–' + u.end + (u.since && u.since < u.start ? ' <span class="text-muted text-[12px]">(since ' + u.since + ')</span>' : '') : '') + '</tr>';
     });
     h += '<tr class="total">' + td('Total') + td('') + td('') + td('') + td(n(tot.sf), 'r') + td('', 'r') + td('', 'r') + td(money(tot.base), 'r') + td(money(tot.addl), 'r') + td(money(tot.base + tot.addl), 'r') + td('', 'r') + td('') + '</tr></tbody>';
     $('rrTable').innerHTML = h;
@@ -236,10 +244,10 @@
     var h = '<thead><tr>' + th('Property') + th('Area') + th('Date') + th('Price', 'r') + th('Size sf', 'r') + th('$/sf', 'r') + th('Cap', 'r') + th('Implied NOI $/sf', 'r') + th('Notes') + th('Source') + '</tr></thead><tbody>';
     var SRC = [CD('ap', 52) + CD('ap', 58), CD('ap', 52) + CD('ap', 58), CD('ap', 52) + CD('ap', 59), CD('ap', 52) + CD('ap', 58), CR(8, 9)];
     M.SALES.forEach(function (s, si) {
-      h += '<tr>' + td(s.addr) + td(s.city) + td(s.date) + td(money(s.price), 'r') + td(n(s.sf), 'r') + td(money(s.price / s.sf), 'r') + td(s.cap ? pct(s.cap, 2) : '–', 'r') + td(s.cap ? money(s.price / s.sf * s.cap, 2) : '–', 'r') + td('<span class="small">' + s.note + '</span>') + td(SRC[si]) + '</tr>';
+      h += '<tr>' + td(s.addr) + td(s.city) + td(s.date) + td(money(s.price), 'r') + td(n(s.sf), 'r') + td(money(s.price / s.sf), 'r') + td(s.cap ? pct(s.cap, 2) : '–', 'r') + td(s.cap ? money(s.price / s.sf * s.cap, 2) : '–', 'r') + td('<span class="text-[12.5px]">' + s.note + '</span>') + td(SRC[si]) + '</tr>';
     });
     var st = R.base.asIs.stabilized;
-    h += '<tr class="total">' + td('Subject at asking price') + td('Rexdale') + td('Sept 2026 ask') + td(money(M.BUILDING.ask), 'r') + td(n(M.BUILDING.gfa), 'r') + td(money(M.BUILDING.ask / M.BUILDING.gfa), 'r') + td(pct(ip.noi / M.BUILDING.ask, 2) + '*', 'r') + td(money(st.noi / M.BUILDING.gfa, 2) + '†', 'r') + td('<span class="small">*on normalized in-place NOI · †stabilized NOI per sf GFA</span>') + td(CR(1) + CD('rr')) + '</tr>';
+    h += '<tr class="total">' + td('Subject at asking price') + td('Rexdale') + td('Sept 2026 ask') + td(money(M.BUILDING.ask), 'r') + td(n(M.BUILDING.gfa), 'r') + td(money(M.BUILDING.ask / M.BUILDING.gfa), 'r') + td(pct(ip.noi / M.BUILDING.ask, 2) + '*', 'r') + td(money(st.noi / M.BUILDING.gfa, 2) + '†', 'r') + td('<span class="text-[12.5px]">*on normalized in-place NOI · †stabilized NOI per sf GFA</span>') + td(CR(1) + CD('rr')) + '</tr>';
     $('salesTable').innerHTML = h + '</tbody>';
   }
   function stab() {
@@ -304,7 +312,7 @@
     var h = '<thead><tr>' + th('Level') + th('GFA sf', 'r') + th('Low $/sf', 'r') + th('Base $/sf', 'r') + th('High $/sf', 'r') + th('Basis') + '</tr></thead><tbody>';
     var basis = ['Fully leased mixed-use comps at $341–440/sf (urban, better locations)' + CD('ap', 58) + '; 964-1010 Albion at $568 includes redevelopment land' + CR(8, 9), 'Suburban Class B/C office: income-supported value at $22 gross and 8.5% is about $98/sf (my judgment, see 5a)', 'Below-grade space at about 15–25% of the main-floor rate (my judgment)'];
     [['Main floor', B.gfaMain], ['Second floor', B.gfaSecond], ['Basement', B.gfaBasement]].forEach(function (l, i) {
-      h += '<tr>' + td(l[0]) + td(n(l[1]), 'r') + td(money(DCA.low[i]), 'r') + td(money(DCA.base[i]), 'r') + td(money(DCA.high[i]), 'r') + td('<span class="small">' + basis[i] + '</span>') + '</tr>';
+      h += '<tr>' + td(l[0]) + td(n(l[1]), 'r') + td(money(DCA.low[i]), 'r') + td(money(DCA.base[i]), 'r') + td(money(DCA.high[i]), 'r') + td('<span class="text-[12.5px]">' + basis[i] + '</span>') + '</tr>';
     });
     h += '<tr>' + td('Less lease-up and capital') + td('', 'r') + td(money(-lu), 'r') + td(money(-lu), 'r') + td(money(-lu), 'r') + td('') + '</tr>';
     h += '<tr class="total">' + td('Indicated as-is value') + td('', 'r') + td(money(dca.low), 'r') + td(money(dca.base), 'r') + td(money(dca.high), 'r') + td('') + '</tr></tbody>';
@@ -314,7 +322,7 @@
     var labels = { down: 'Downside', base: 'Base', up: 'Upside' };
     var desc = { down: 'Rents $40 / $35 / $18 / $15; caps +50 bps; office leases in 24 months; $400K capital', base: 'Rents $43 / $38 / $22 / $17; caps 6.0 / 8.5 / 9.25%; office 18 months; $250K capital', up: 'Medical second floor at $26; $45 / $40 / $18; caps −25 bps; office 12 months; $150K capital' };
     var h = '<thead><tr>' + th('Case') + th('Assumptions') + th('Stabilized NOI', 'r') + th('Cap', 'r') + th('Direct cap as-is', 'r') + th('DCF value', 'r') + '</tr></thead><tbody>';
-    ['down', 'base', 'up'].forEach(function (s) { var a = R[s].asIs; h += '<tr' + (s === 'base' ? ' class="total"' : '') + '>' + td(labels[s]) + td('<span class="small">' + desc[s] + '</span>') + td(money(a.stabilized.noi), 'r') + td(pct(a.stabilized.cap, 2), 'r') + td(money(a.value), 'r') + td(money(R[s].dcf.pv), 'r') + '</tr>'; });
+    ['down', 'base', 'up'].forEach(function (s) { var a = R[s].asIs; h += '<tr' + (s === 'base' ? ' class="total"' : '') + '>' + td(labels[s]) + td('<span class="text-[12.5px]">' + desc[s] + '</span>') + td(money(a.stabilized.noi), 'r') + td(pct(a.stabilized.cap, 2), 'r') + td(money(a.value), 'r') + td(money(R[s].dcf.pv), 'r') + '</tr>'; });
     $('scenarioTable').innerHTML = h + '</tbody>';
   }
   function reconT() {
@@ -337,7 +345,7 @@
         var t = Math.max(0, Math.min(0.999, (v - lo) / (hi - lo))); var idx = Math.floor(t * ramp.length);
         var hex = css(ramp[idx]).replace('#', ''); var lum = (parseInt(hex.substr(0, 2), 16) * 0.299 + parseInt(hex.substr(2, 2), 16) * 0.587 + parseInt(hex.substr(4, 2), 16) * 0.114) / 255;
         var dark = lum < 0.55;
-        return '<td class="r" style="background:var(' + ramp[idx] + ');color:' + (dark ? '#fff' : 'var(--ink)') + (caps[j] === 0.07 && rents[i] === 22 ? ';font-weight:700;outline:2px solid var(--ink);outline-offset:-2px' : '') + '">' + n(v / 1000) + '</td>';
+        return '<td class="r" style="background:var(' + ramp[idx] + ');color:' + (dark ? '#fff' : '#073642') + (caps[j] === 0.07 && rents[i] === 22 ? ';font-weight:700;outline:2px solid var(--ink);outline-offset:-2px' : '') + '">' + n(v / 1000) + '</td>';
       }).join('') + '</tr>';
     });
     $('gridTable').innerHTML = h + '</tbody>';
@@ -377,14 +385,15 @@
   function buildCalc() {
     var box = $('calcControls'); var h = '';
     CTL.forEach(function (g) {
-      h += '<div class="ctl-group"><h4>' + g[0] + '</h4>';
+      h += '<div><h4 class="mt-4 mb-0">' + g[0] + '</h4>';
       g[1].forEach(function (c) {
         var v = M.DEFAULTS[c[0]]; calc[c[0]] = v;
         h += '<div class="ctl"><label for="c_' + c[0] + '">' + c[1] + '</label><output id="o_' + c[0] + '">' + fmtCtl(v, c[5]) + '</output><input type="range" id="c_' + c[0] + '" min="' + c[2] + '" max="' + c[3] + '" step="' + c[4] + '" value="' + v + '" data-k="' + c[0] + '" data-f="' + c[5] + '">' + (c[6] ? '<span class="hint">' + c[6] + '</span>' : '') + '</div>';
       });
       h += '</div>';
     });
-    h += '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" data-s="down">Downside</button><button class="btn primary" type="button" data-s="base">Base (reset)</button><button class="btn" type="button" data-s="up">Upside</button></div>';
+    h += '<div class="mt-3.5 flex flex-wrap gap-2"><button class="btn" type="button" data-s="down">Downside</button><button class="btn primary" type="button" data-s="base">Base (reset)</button><button class="btn" type="button" data-s="up">Upside</button></div>';
+    h += '<div class="lg:hidden sticky bottom-0 -mx-4 sm:-mx-5 -mb-4 sm:-mb-5 mt-4 px-4 py-2.5 bg-surface2 border-t border-line rounded-b-xl flex justify-between gap-3 text-[13px]" aria-live="polite"><span class="whitespace-nowrap">As-is <b id="m_val"></b></span><span class="whitespace-nowrap">DCF <b id="m_dcf"></b></span><span class="whitespace-nowrap">IRR <b id="m_irr"></b></span></div>';
     box.innerHTML = h;
     box.querySelectorAll('input[type=range]').forEach(function (inp) {
       inp.addEventListener('input', function () { calc[inp.dataset.k] = +inp.value; $('o_' + inp.dataset.k).textContent = fmtCtl(inp.value, inp.dataset.f); calcOut(); });
@@ -408,13 +417,14 @@
     var out = $('calcOut');
     if (!priceEl) {
       out.innerHTML = '<div class="tile"><div class="label">As-is value (direct cap)</div><div class="hero-num" id="r_val"></div><div class="sub" id="r_sub"></div></div>' +
-        '<div class="tbl-wrap" style="margin-top:12px"><table id="r_tbl"></table></div>' +
-        '<h4 style="margin:12px 0 6px">Test a purchase price</h4><input class="price-in" id="calcPrice" inputmode="numeric" value="3,900,000" aria-label="Purchase price">' +
-        '<div class="tbl-wrap" style="margin-top:10px"><table id="r_px"></table></div>';
+        '<div class="tbl mt-3"><table id="r_tbl"></table></div>' +
+        '<h4 class="mt-3 mb-1.5">Test a purchase price</h4><input class="w-44 rounded-lg border border-line bg-surface text-ink text-[16px] px-2.5 py-1.5" id="calcPrice" inputmode="numeric" value="3,900,000" aria-label="Purchase price">' +
+        '<div class="tbl mt-2.5"><table id="r_px"></table></div>';
       $('calcPrice').addEventListener('input', calcOut);
       return calcOut();
     }
     $('r_val').textContent = mm(a.value, 2);
+    $('m_val').textContent = mm(a.value, 2); $('m_dcf').textContent = mm(d.pv, 2); $('m_irr').textContent = pct(d.irr); $('m_irr').title = 'At a price of ' + money(price);
     $('r_sub').textContent = 'DCF ' + mm(d.pv, 2) + ' · ' + money(a.value / M.BUILDING.gfa) + '/sf GFA';
     $('r_tbl').innerHTML = '<tbody>' +
       '<tr><td>Stabilized NOI</td><td class="r">' + money(a.stabilized.noi) + '</td></tr>' +
@@ -437,5 +447,4 @@
   rrFilters(); ownerOpex(); ipTable(); expiry(); sales(); stab(); leaseUpT(); contractT(); dcSummary(); dcfT(); dcaT(); scenarioT(); reconT(); gridT(); offerT(); buildCalc();
   drawCharts();
   var rt; addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(drawCharts, 150); });
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawCharts);
 })();
